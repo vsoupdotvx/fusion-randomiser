@@ -334,20 +334,7 @@ impl RegData {
         match instruction.code() {
             Code::Mov_rm64_r64 |
             Code::Mov_r64_rm64 => {
-                let src = match instruction.op1_kind() {
-                    OpKind::Register => {
-                        self.gprs[instruction.op1_register().number()]
-                    }
-                    OpKind::Memory => {
-                        match instruction.memory_base() {
-                            Register::RSP => {
-                                self.stack.get(&(instruction.memory_displacement32() as i32 + self.sp)).cloned()
-                            }
-                            _ => None
-                        }
-                    }
-                    _ => None
-                };
+                let src = self.get_src_operand(instruction, meta);
                 match instruction.op0_kind() {
                     OpKind::Register => {
                         self.gprs[instruction.op0_register().number()] = src;
@@ -381,7 +368,6 @@ impl RegData {
                 }
             }
             Code::Call_rel32_64 => {
-                //TODO: rax modified by function
                 if let Some(idx) = meta.method_addr_table.get(&instruction.near_branch64()) {
                     let method = &meta.methods_array[*idx as usize];
                     let return_type = IL2CppParameter::from_bytes(
@@ -405,6 +391,20 @@ impl RegData {
                 self.gprs[10] = None;
                 self.gprs[11] = None;
             }
+            Code::Movzx_r64_rm8  |
+            Code::Movzx_r32_rm8  |
+            Code::Movzx_r16_rm8  |
+            Code::Movzx_r64_rm16 |
+            Code::Movzx_r32_rm16 |
+            Code::Mov_r8_rm8     |
+            Code::Mov_r16_rm16   |
+            Code::Mov_r32_rm32   |
+            Code::Mov_r8_imm8    |
+            Code::Mov_r16_imm16  |
+            Code::Mov_r32_imm32  |
+            Code::Mov_r64_imm64 => {
+                self.gprs[instruction.op0_register().full_register().number()] = None;
+            }
             _ => {}
         }
         if instruction.is_stack_instruction() {
@@ -412,6 +412,46 @@ impl RegData {
                 Mnemonic::Call => {}
                 _ => self.sp += instruction.stack_pointer_increment()
             }
+        }
+    }
+
+    fn get_src_operand(&mut self, instruction: &Instruction, meta: &IL2CppDumper) -> Option<u32> {
+        match instruction.op1_kind() {
+            OpKind::Register => {
+                self.gprs[instruction.op1_register().number()]
+            }
+            OpKind::Memory => {
+                match instruction.memory_base() {
+                    Register::RSP => {
+                        self.stack.get(&(instruction.memory_displacement32() as i32 + self.sp)).cloned()
+                    }
+                    Register::None |
+                    Register::RIP => None,
+                    _ => {
+                        let struct_idx = self.gprs[instruction.memory_base().number()]?;
+                        let strukt = IL2CppStruct::from_bytes(
+                            &meta.type_definitions.as_slice_of(&meta.metadata)
+                            [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                        );
+                        let (field, field_off) = strukt.get_field_type_at_off(struct_idx, instruction.memory_displacement64(), meta)?;
+                        if field_off == instruction.memory_displacement32() {
+                            let strukt_idx = meta.types_array[field.type_idx as usize].get_struct()?;
+                            let strukt = IL2CppStruct::from_bytes(
+                                &meta.type_definitions.as_slice_of(&meta.metadata)
+                                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                            );
+                            if strukt.flags & 0x2000 == 0 {
+                                Some(strukt_idx)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
+            _ => None
         }
     }
 }
@@ -493,11 +533,11 @@ impl SymbolResolver for DecodeSymbolResolver {
                     Register::None => {}
                     Register::RIP  => {}
                     _ => if let Some(class_idx) = reg_data.gprs[instruction.memory_base().number()] {
-                        let class = IL2CppStruct::from_bytes(
+                        let strukt = IL2CppStruct::from_bytes(
                             &meta.type_definitions.as_slice_of(&meta.metadata)
                             [class_idx as usize * STRUCT_STRIDE .. class_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                         );
-                        let string = format!("{}.{}", meta.get_string(class.name_off), class.get_field_name_at_off(class_idx, addr, meta));
+                        let string = format!("{}.{}", meta.get_string(strukt.name_off), strukt.get_field_name_at_off(class_idx, addr, meta));
                         if !string.is_empty() {
                             return Some(SymbolResult::with_string(addr, string))
                         }

@@ -649,8 +649,32 @@ impl IL2CppStruct {
     }
     
     fn get_field_name_at_off_internal(&self, idx: u32, off: u64, recursion: u32, meta: &IL2CppDumper) -> String {
+        if let Some((field, field_off)) = self.get_field_type_at_off(idx, off, meta) {
+            let mut ret = meta.get_string(field.name_off).to_string();
+            
+            if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
+                let strukt = IL2CppStruct::from_bytes(
+                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                );
+                if strukt.flags & 0x2000 != 0 && recursion < 5 {
+                    format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off - field_off as u64, recursion + 1, meta))
+                } else if field_off != off as u32 {
+                    format_to!(ret, "+0x{:X}", off as u32 - field_off)
+                }
+            } else if field_off != off as u32 {
+                format_to!(ret, "+0x{:X}", off as u32 - field_off)
+            }
+            
+            ret
+        } else {
+            "".to_owned()
+        }
+    }
+    
+    fn get_field_type_at_off(&self, idx: u32, off: u64, meta: &IL2CppDumper) -> Option<(IL2CppField, u32)> {
         if self.field_start.is_negative() || self.field_count == 0 {
-            return "".to_string();
+            return None;
         }
         let mut off_vec: SmallVec<[(u32,u32);30]> = SmallVec::with_capacity(self.field_count as usize);
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
@@ -671,7 +695,7 @@ impl IL2CppStruct {
             }
         }
         if off_vec.is_empty() {
-            return "".to_string();
+            return None;
         }
         off_vec.sort_unstable_by_key(|(x, _)| *x);
         let idx = max(off_vec.partition_point(|(x, _)| *x <= off as u32), 1) - 1;
@@ -680,24 +704,7 @@ impl IL2CppStruct {
             &meta.fields.as_slice_of(&meta.metadata)
             [field_idx * FIELD_STRIDE .. field_idx * FIELD_STRIDE + FIELD_STRIDE]
         );
-        
-        let mut ret = meta.get_string(field.name_off).to_string();
-        
-        if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
-            let strukt = IL2CppStruct::from_bytes(
-                &meta.type_definitions.as_slice_of(&meta.metadata)
-                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
-            );
-            if strukt.flags & 0x2000 != 0 && recursion < 5 {
-                format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off - off_vec[idx].0 as u64, recursion + 1, meta))
-            } else if off_vec[idx].0 != off as u32 {
-                format_to!(ret, "+0x{:X}", off as u32 - off_vec[idx].0)
-            }
-        } else if off_vec[idx].0 != off as u32 {
-            format_to!(ret, "+0x{:X}", off as u32 - off_vec[idx].0)
-        }
-        
-        ret
+        Some((field, off_vec[idx].0))
     }
 }
 
