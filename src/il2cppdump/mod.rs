@@ -6,6 +6,13 @@ use core::ffi::CStr;
 use core::mem::size_of;
 use core::mem::transmute;
 use std::cmp::max;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+use std::thread::available_parallelism;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::num::NonZero;
@@ -18,43 +25,44 @@ use util::OffSiz;
 use crate::format_to;
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct IL2CppDumper {
-    string_literals:            OffSiz,
-    string_literals_data:       OffSiz,
-    strings:                    OffSiz,
-    events:                     OffSiz,
-    properties:                 OffSiz,
-    methods:                    OffSiz,
-    parameter_defaults:         OffSiz,
-    field_defaults:             OffSiz,
-    field_parameter_defaults:   OffSiz,
-    field_marshaled_sizes:      OffSiz,
-    parameters:                 OffSiz,
-    fields:                     OffSiz,
-    generic_parameters:         OffSiz,
-    generic_constraints:        OffSiz,
-    generic_containers:         OffSiz,
-    nested_types:               OffSiz,
-    interfaces:                 OffSiz,
-    vtable_methods:             OffSiz,
-    interface_offsets:          OffSiz,
-    type_definitions:           OffSiz,
-    images:                     OffSiz,
-    assemblies:                 OffSiz,
-    field_refs:                 OffSiz,
-    referenced_assemblies:      OffSiz,
-    attribute_data:             OffSiz,
-    attribute_data_range:       OffSiz,
-    uvcp_types:                 OffSiz,
-    uvcp_ranges:                OffSiz,
-    win_runtime_type_names:     OffSiz,
-    win_runtime_strings:        OffSiz,
-    exported_type_definitions:  OffSiz,
+    string_literals:           OffSiz,
+    string_literals_data:      OffSiz,
+    strings:                   OffSiz,
+    events:                    OffSiz,
+    properties:                OffSiz,
+    methods:                   OffSiz,
+    parameter_defaults:        OffSiz,
+    field_defaults:            OffSiz,
+    field_parameter_defaults:  OffSiz,
+    field_marshaled_sizes:     OffSiz,
+    parameters:                OffSiz,
+    fields:                    OffSiz,
+    generic_parameters:        OffSiz,
+    generic_constraints:       OffSiz,
+    generic_containers:        OffSiz,
+    nested_types:              OffSiz,
+    interfaces:                OffSiz,
+    vtable_methods:            OffSiz,
+    interface_offsets:         OffSiz,
+    type_definitions:          OffSiz,
+    images:                    OffSiz,
+    assemblies:                OffSiz,
+    field_refs:                OffSiz,
+    referenced_assemblies:     OffSiz,
+    attribute_data:            OffSiz,
+    attribute_data_range:      OffSiz,
+    uvcp_types:                OffSiz,
+    uvcp_ranges:               OffSiz,
+    win_runtime_type_names:    OffSiz,
+    win_runtime_strings:       OffSiz,
+    exported_type_definitions: OffSiz,
     
     //strings_array:   Vec<*const CStr>,
-    methods_array:                   Vec<Method>,
-    methods_table:           HashMap<String,u32>,
-    method_addr_table:          HashMap<u64,u32>,
+    pub methods_array:               Vec<Method>,
+    pub methods_table:       HashMap<String,u32>,
+    pub method_addr_table:      HashMap<u64,u32>,
     icgm_array:                        Vec<Icgm>,
     types_array:                 Vec<IL2CppType>,
     generic_class_array: Vec<IL2CppGenericClass>,
@@ -66,10 +74,11 @@ pub struct IL2CppDumper {
     code_reg:         CodeRegistration,
     meta_reg:     MetadataRegistration,
     
-    pe:                             Pe,
+    pub pe:                         Pe,
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct MetadataRegistration {
     generic_classes_cnt:       u32,
     generic_classes:         usize,
@@ -113,6 +122,7 @@ impl MetadataRegistration {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct IL2CppType {
     data:            u64,
     attrs:           u16,
@@ -124,6 +134,7 @@ pub struct IL2CppType {
 }
 #[allow(dead_code)]
 #[repr(u8)]
+#[derive(Clone)]
 #[non_exhaustive]
 enum IL2CppTypeEnum {
     End         = 0x00,
@@ -328,6 +339,7 @@ impl IL2CppType {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct IL2CppGenericClass {
     type_off:  usize,
     class_inst:  u64,
@@ -347,6 +359,7 @@ impl IL2CppGenericClass {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct CodeRegistration {
     reverse_p_invoke_wrapper_cnt:    u32,
     generic_method_ptrs_cnt:         u32,
@@ -392,6 +405,7 @@ impl CodeRegistration {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct CodeGenModule {
     method_ptrs_cnt:                    u32,
     adjustor_thunks_cnt:                u32,
@@ -439,7 +453,7 @@ pub struct Method {
     pub typ:  Option<u32>,
 }
 impl Method {
-    fn name(&self, meta: &IL2CppDumper) -> String {
+    pub fn name(&self, meta: &IL2CppDumper) -> String {
         let name = meta.get_string(self.metadata.name_off);
         let mut generic_vec: SmallVec<[u32;2]> = SmallVec::new();
         
@@ -509,7 +523,7 @@ impl Method {
             format!("{typ}{name}<{generics}>({args}){return_type}")
         }
     }
-    fn name_short(&self, meta: &IL2CppDumper) -> String {
+    pub fn name_short(&self, meta: &IL2CppDumper) -> String {
         let name = meta.get_string(self.metadata.name_off);
         
         let typ  = {
@@ -561,6 +575,7 @@ impl IL2CppMethod {
 }
 
 #[repr(C)]
+#[derive(Clone)]
 struct IL2CppStruct {
     name_off:                u32,
     namespace_off:           u32,
@@ -649,7 +664,7 @@ impl IL2CppStruct {
     }
     
     fn get_field_name_at_off_internal(&self, idx: u32, off: u64, recursion: u32, meta: &IL2CppDumper) -> String {
-        if let Some((field, field_off)) = self.get_field_type_at_off(idx, off, meta) {
+        if let Some((field, field_off, _strukt_idx)) = self.get_field_type_at_off(idx, off, meta) {
             let mut ret = meta.get_string(field.name_off).to_string();
             
             if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
@@ -658,6 +673,7 @@ impl IL2CppStruct {
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
                 if strukt.flags & 0x2000 != 0 && recursion < 5 {
+                //if recursion < 5 {
                     format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off - field_off as u64, recursion + 1, meta))
                 } else if field_off != off as u32 {
                     format_to!(ret, "+0x{:X}", off as u32 - field_off)
@@ -672,8 +688,17 @@ impl IL2CppStruct {
         }
     }
     
-    fn get_field_type_at_off(&self, idx: u32, off: u64, meta: &IL2CppDumper) -> Option<(IL2CppField, u32)> {
+    fn get_field_type_at_off(&self, idx: u32, off: u64, meta: &IL2CppDumper) -> Option<(IL2CppField, u32, u32)> {
         if self.field_start.is_negative() || self.field_count == 0 {
+            if let Some(struct_idx) = self.get_parent_struct_idx(meta) {
+                let strukt = IL2CppStruct::from_bytes(
+                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                );
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                    return Some((field, offset, strukt_idx));
+                }
+            }
             return None;
         }
         let mut off_vec: SmallVec<[(u32,u32);30]> = SmallVec::with_capacity(self.field_count as usize);
@@ -695,20 +720,84 @@ impl IL2CppStruct {
             }
         }
         if off_vec.is_empty() {
+            if let Some(struct_idx) = self.get_parent_struct_idx(meta) {
+                let strukt = IL2CppStruct::from_bytes(
+                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                );
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                    return Some((field, offset, strukt_idx));
+                }
+            }
             return None;
         }
         off_vec.sort_unstable_by_key(|(x, _)| *x);
-        let idx = max(off_vec.partition_point(|(x, _)| *x <= off as u32), 1) - 1;
-        let field_idx = off_vec[idx].1 as usize;
-        let field = IL2CppField::from_bytes(
+        let point = off_vec.partition_point(|(x, _)| *x <= off as u32);
+        if point == 0 {
+            if let Some(struct_idx) = self.get_parent_struct_idx(meta) {
+                let strukt = IL2CppStruct::from_bytes(
+                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                );
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                    return Some((field, offset, strukt_idx));
+                }
+            }
+        }
+        let field_idx = off_vec[max(point, 1) - 1].1 as usize;
+        Some((IL2CppField::from_bytes(
             &meta.fields.as_slice_of(&meta.metadata)
             [field_idx * FIELD_STRIDE .. field_idx * FIELD_STRIDE + FIELD_STRIDE]
-        );
-        Some((field, off_vec[idx].0))
+        ), off_vec[max(point, 1) - 1].0, idx))
+    }
+    
+    fn get_parent_struct_idx(&self, meta: &IL2CppDumper) -> Option<u32> {
+        if self.parent_idx >= 0 {
+            return meta.types_array[self.parent_idx as usize].get_struct();
+        }
+        None
+    }
+    
+    pub fn get_field_offsets(&self, idx: u32, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+        self.get_field_offsets_internal(idx, 0, &meta.get_string(self.name_off), meta, table);
+    }
+    
+    fn get_field_offsets_internal(&self, idx: u32, recursion: u32, prefix: &str, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+        let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
+        if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
+            for field_idx in 0 .. self.field_count as usize {
+                let mut off = u32::from_le_bytes(meta.assembly[off_off + field_idx * 4 .. off_off + field_idx * 4 + 4].try_into().unwrap());
+                let field = IL2CppField::from_bytes(
+                    &meta.fields.as_slice_of(&meta.metadata)
+                    [(self.field_start as usize + field_idx) * FIELD_STRIDE .. (self.field_start as usize + field_idx) * FIELD_STRIDE + FIELD_STRIDE]
+                );
+                let typ = &meta.types_array[field.type_idx as usize];
+                if self.bitfield & 0x1 != 0 && typ.attrs & 0x10 == 0 {
+                    off = off.wrapping_sub(16);
+                }
+                if typ.attrs & 0x50 == 0 {
+                    let name = format!("{prefix}.{}", meta.get_string(field.name_off));
+                    
+                    if recursion < 5 {
+                        if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
+                            let strukt = IL2CppStruct::from_bytes(
+                                &meta.type_definitions.as_slice_of(&meta.metadata)
+                                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                            );
+                            if strukt.flags & 0x2000 != 0 {
+                                strukt.get_field_offsets_internal(idx, recursion + 1, &name, meta, table);
+                            }
+                        }
+                    }
+                    table.insert(name, off as u64);
+                }
+            }
+        }
     }
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct IL2CppField {
     name_off: u32,
     type_idx: i32,
@@ -726,6 +815,7 @@ impl IL2CppField {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct IL2CppImage {
     name_off:               u32,
     assembly_idx:           i32,
@@ -757,6 +847,7 @@ impl IL2CppImage {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct IL2CppParameter {
     name_off: u32,
     token:    u32,
@@ -774,6 +865,7 @@ impl IL2CppParameter {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct IL2CppGenericParameter {
     owner_idx:         i32,
     name_off:          u32,
@@ -796,6 +888,7 @@ impl IL2CppGenericParameter {
     }
 }
 
+#[derive(Clone)]
 struct Icgm {
     img: IL2CppImage,
     cgm: CodeGenModule,
@@ -804,9 +897,9 @@ struct Icgm {
         
 
 impl IL2CppDumper {
-    pub fn initialize(path: PathBuf) -> Result<Self, String> {
+    pub fn initialize(path: &PathBuf) -> Result<Self, String> {
         let game_root = if path.is_file() {
-            path.parent().unwrap().to_path_buf()
+            &path.parent().unwrap().to_path_buf()
         } else {
             path
         };
@@ -880,7 +973,6 @@ impl IL2CppDumper {
             win_runtime_strings:       OffSiz::from_bytes(&metadata[0x0f0..0x0f8]),
             exported_type_definitions: OffSiz::from_bytes(&metadata[0x0f8..0x100]),
             
-            //strings_array: Vec::new(),
             methods_array:         Vec::new(),
             methods_table:     HashMap::new(),
             method_addr_table: HashMap::new(),
@@ -897,84 +989,40 @@ impl IL2CppDumper {
             assembly,
         };
         
-        for image_off in il2cpp.images.as_range().step_by(IMAGE_STRIDE) {
-            let image = IL2CppImage::from_bytes(&il2cpp.metadata[image_off..image_off+IMAGE_STRIDE]);
-            //println!("{}", il2cpp.get_string(image.name_off));
-            if image.type_start >= 0 {
-                for i in image.type_start as usize .. image.type_start as usize + image.type_count as usize {
-                    let image_off = i * STRUCT_STRIDE;
-                    let _typ = IL2CppImage::from_bytes(&il2cpp.metadata[image_off..image_off+STRUCT_STRIDE]);
-                    //println!("{}", typ.get_name())
-                }
-            }
-        }
-        //il2cpp.populate_strings_array();
+        //for image_off in il2cpp.images.as_range().step_by(IMAGE_STRIDE) {
+        //    let image = IL2CppImage::from_bytes(&il2cpp.metadata[image_off..image_off+IMAGE_STRIDE]);
+        //    //println!("{}", il2cpp.get_string(image.name_off));
+        //    if image.type_start >= 0 {
+        //        for i in image.type_start as usize .. image.type_start as usize + image.type_count as usize {
+        //            let image_off = i * STRUCT_STRIDE;
+        //            let _typ = IL2CppImage::from_bytes(&il2cpp.metadata[image_off..image_off+STRUCT_STRIDE]);
+        //            //println!("{}", typ.get_name())
+        //        }
+        //    }
+        //}
+        
         il2cpp.populate_icgm();
         il2cpp.populate_types();
         il2cpp.populate_methods();
         
-        //if let Some(idx) = il2cpp.methods_table.get("Zombie::DropItem()") {
-        //    il2cpp.methods_array[*idx as usize].decode(&il2cpp);
-        //}
-        //if let Some(idx) = il2cpp.methods_table.get("InGameUIMgr::UnlockCard(theSeedType: i32) -> bool") {
-        //    il2cpp.methods_array[*idx as usize].decode(&il2cpp);
-        //}
-        //if let Some(idx) = il2cpp.methods_table.get("DroppedCard::PickUp() -> bool") {
-        //    il2cpp.methods_array[*idx as usize].decode(&il2cpp);
-        //}
-        //if let Some(idx) = il2cpp.methods_table.get("DroppedCard::Awake()") {
-        //    il2cpp.methods_array[*idx as usize].decode(&il2cpp);
-        //}
-        //if let Some(idx) = il2cpp.methods_table.get("InGameUIMgr::UnlockCard(theSeedType: i32) -> bool") {
-        //    il2cpp.methods_array[*idx as usize].decode(&il2cpp);
-        //}
-        //
-        let mut sorted: Vec<u32> = Vec::with_capacity(il2cpp.methods_array.len());
-        for i in 0..il2cpp.methods_array.len() {
-            sorted.push(i as u32);
-        }
-        sorted.sort_unstable_by_key(|x| il2cpp.methods_array[*x as usize].addr);
-        let mut out_str = String::new();
-        for i in &sorted {
-            il2cpp.methods_array[*i as usize].decode(&il2cpp, &mut out_str);
-            print!("{out_str}");
-            out_str.clear();
+        let il2cpp_arc = Arc::new(il2cpp);
+        
+        match il2cpp_arc.output_disasm(concat!(env!("CARGO_MANIFEST_DIR"), "/out.s")) {
+            Ok(())  => println!("Successfully output disasm"),
+            Err(()) => println!("Failed to output disasm"),
         }
         
-        Ok(il2cpp)
+        Ok(Arc::into_inner(il2cpp_arc).unwrap())
     }
+    
     fn get_string<T: Into::<u64>>(&self, idx: T) -> Cow<'_,str> {
         CStr::from_bytes_until_nul(&self.strings.as_slice_of(&self.metadata)[idx.into() as usize ..]).unwrap().to_string_lossy()
     }
+    
     fn get_asm_string(&self, idx: usize) -> Cow<'_,str> {
         CStr::from_bytes_until_nul(&self.assembly[idx..]).unwrap().to_string_lossy()
     }
-    //fn populate_strings_array(&mut self) {
-    //    let mut size = 0;
-    //    let mut range = self.strings.as_range();
-    //    
-    //    for i in &self.metadata[range.clone()] {
-    //        if *i == 0 {
-    //            size += 1
-    //        }
-    //    }
-    //    self.strings_array.reserve_exact(size);
-    //    for _ in 0..size {
-    //        let mut end_off = 0;
-    //        'inner_loop: for i in range.clone() {
-    //            if self.metadata[i] == 0 {
-    //                end_off = i+1;
-    //                break 'inner_loop;
-    //            }
-    //        }
-    //        self.strings_array.push(
-    //            CStr::from_bytes_with_nul(&self.metadata[range.start..end_off]).unwrap()
-    //        );
-    //        range.start = end_off;
-    //    }
-    //    
-    //    unsafe {println!("a: {}", (*self.strings_array[49]).to_string_lossy())};
-    //}
+    
     fn populate_icgm(&mut self) {
         let image_cnt = self.images.siz as usize / IMAGE_STRIDE;
         
@@ -1101,17 +1149,26 @@ impl IL2CppDumper {
                 self.methods_array[sorted[method_cnt-1].1].len = text_end - self.methods_array[sorted[method_cnt-1].1].addr;
             }
         }
-        
-        for method in self.methods_array.iter().enumerate() {
-            let name = method.1.name(self);
-            //println!("0x{:07x} 0x{:09x} 0x{:05x} {}", self.pe.map_v2p(method.1.addr).unwrap_or(0), method.1.addr, method.1.len, name);
-            //if let Some(_) = self.methods_table.get(&name) {
-            //    println!("Duplicate: {}", name)
-            //}
-            if method.1.addr != 0 {
-                self.method_addr_table.insert(method.1.addr, method.0 as u32);
+        let out_txt_path = concat!(env!("CARGO_MANIFEST_DIR"), "/out.txt");
+        if let Ok(out_txt) = OpenOptions::new().create_new(true).write(true).open(out_txt_path) {
+            let mut out_txt = out_txt;
+            for (i, method) in self.methods_array.iter().enumerate() {
+                let name = method.name(self);
+                //println!("0x{:07x} 0x{:09x} 0x{:05x} {}", self.pe.map_v2p(method.1.addr).unwrap_or(0), method.1.addr, method.1.len, name);
+                out_txt.write_all(format!("0x{:07x} 0x{:09x} 0x{:05x} {}\n", self.pe.map_v2p(method.addr).unwrap_or(0), method.addr, method.len, name).as_bytes()).unwrap();
+                if method.addr != 0 {
+                    self.method_addr_table.insert(method.addr, i as u32);
+                }
+                self.methods_table.insert(name, i as u32);
             }
-            self.methods_table.insert(name, method.0 as u32);
+        } else {
+            for (i, method) in self.methods_array.iter().enumerate() {
+                let name = method.name(self);
+                if method.addr != 0 {
+                    self.method_addr_table.insert(method.addr, i as u32);
+                }
+                self.methods_table.insert(name, i as u32);
+            }
         }
     }
     
@@ -1132,5 +1189,89 @@ impl IL2CppDumper {
         //typ.get_name(&self)
         //format!("{:x}", idx)
         self.types_array[idx as usize].name(self)
+    }
+    
+    pub fn get_field_offsets(&self, table: &mut HashMap<String, u64>) {
+        let typ_cnt    = self.type_definitions.siz as usize / STRUCT_STRIDE;
+        for i in 0..typ_cnt {
+            let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);
+            il2cppstruct.get_field_offsets(i as u32, self, table)
+        }
+    }
+    
+    pub fn output_disasm<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
+        let mut sorted: Vec<u32> = Vec::with_capacity(self.methods_array.len());
+        for i in 0..self.methods_array.len() {
+            sorted.push(i as u32);
+        }
+        sorted.sort_unstable_by_key(|x| self.methods_array[*x as usize].addr);
+        let sorted = Arc::new(sorted);
+        
+        if let Ok(out_s) = OpenOptions::new().create_new(true).truncate(true).write(true).open(out_path) {
+            let mut out_s = out_s;
+            
+            let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(self.methods_array.len());
+            for _ in 0..self.methods_array.len() {
+                string_vec.push(Mutex::new(None));
+            }
+            let string_vec = Arc::new(string_vec);
+            
+            let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; self.methods_array.len()]));
+            
+            //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
+            let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
+            let mut thread_vec = Vec::with_capacity(thread_cnt);
+            for _tidx in 0..thread_cnt {
+                thread_vec.push(thread::spawn({
+                    let string_vec_ref = Arc::clone(&string_vec);
+                    let a_bool_vec_ref = Arc::clone(&a_bool_vec);
+                    let sorted_ref     = Arc::clone(&sorted);
+                    let il2cpp_ref     = Arc::clone(self);
+                    move || {
+                        let mut current_idx = 0;
+                        let mut out_str = String::new();
+                        loop {
+                            loop {
+                                let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
+                                for i in current_idx..sorted_ref.len() {
+                                    let taken = bool_mutex.get_mut(i).unwrap();
+                                    if *taken {
+                                        current_idx = i + 1;
+                                    } else {
+                                        *taken = true;
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            
+                            if current_idx == sorted_ref.len() {
+                                break;
+                            }
+                            
+                            il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
+                            
+                            {
+                                let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
+                                *string_mutex = Some(out_str.clone());
+                            }
+                            
+                            out_str.clear();
+                        }
+                    }
+                }));
+            }
+            for t in thread_vec {
+                t.join().unwrap();
+            }
+            
+            for s in string_vec.iter() {
+                out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
+            }
+        } else {
+            return Err(());
+        }
+        
+        Ok(())
     }
 }

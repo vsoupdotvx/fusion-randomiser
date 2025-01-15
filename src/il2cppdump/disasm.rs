@@ -16,10 +16,6 @@ impl Method {
         } else {
             return;
         };
-        let mut locs:          HashMap<u64, usize> = HashMap::with_capacity(32);
-        let mut loops:         HashMap<u64, usize> = HashMap::with_capacity(32);
-        let mut unknown_calls: HashMap<u64, usize> = HashMap::with_capacity(32);
-        
         let mut label_name    = String::from("\"") + &self.name_short(meta);
         let function_name_len = label_name.len();
         
@@ -38,43 +34,23 @@ impl Method {
         let mut mnemonic_formatter = GasFormatter::new();
         set_formatter_options(&mut mnemonic_formatter);
         
-        let mut last_ret_idx = 0usize;
-        let mut last_loc_ip  = 0u64;
-        for instruction in instructions.iter().enumerate() {
-            match instruction.1.flow_control() {
-                FlowControl::UnconditionalBranch |
-                FlowControl::ConditionalBranch => {
-                    let addr = instruction.1.near_branch64();
-                    if addr >= self.addr && addr <= self.addr + self.len {
-                        if instruction.1.next_ip() <= addr {
-                            if !locs.contains_key(&addr) {
-                                last_loc_ip  = max(addr, last_loc_ip);
-                                locs.insert(addr, locs.len());
-                            }
-                        } else if !locs.contains_key(&addr) {
-                            loops.insert(addr, loops.len());
-                        }
-                    }
-                }
-                FlowControl::Call => {
-                    let addr = instruction.1.near_branch64();
-                    if !meta.method_addr_table.contains_key(&addr) && !unknown_calls.contains_key(&addr) {
-                        let len = unknown_calls.len();
-                        unknown_calls.insert(addr, len);
-                        format_label(len, &mut label_name, function_name_len, ".unknown_call");
-                        format_to!(out_str, ".def    {label_name}, 0x{addr:x}\n.global {label_name}\n");
-                    }
-                }
-                FlowControl::Return |
-                FlowControl::Interrupt => {
-                    if last_loc_ip <= instruction.1.ip() {
-                        last_ret_idx = instruction.0;
-                        break;
-                    }
-                }
-                _ => {}
+        let (locs, loops, unknown_calls, last_ret_idx) = self.get_locs_loops_calls_endret(&instructions, meta);
+        
+        {
+            let mut unknown_call_vec: Vec<(u64, usize)> = Vec::with_capacity(unknown_calls.len());
+            
+            for (addr, idx) in &unknown_calls {
+                unknown_call_vec.push((*addr, *idx));
+            }
+            
+            unknown_call_vec.sort_unstable_by_key(|(_addr, idx)| {*idx});
+            
+            for (addr, idx) in unknown_call_vec {
+                format_label(idx, &mut label_name, function_name_len, ".unknown_call");
+                format_to!(out_str, ".def    {label_name}, 0x{addr:x}\n.global {label_name}\n");
             }
         }
+        
         for instruction in instructions.iter().enumerate() {
             match instruction.1.flow_control() {
                 FlowControl::UnconditionalBranch |
@@ -211,11 +187,11 @@ impl Method {
                 };
                 if let Some(idx) = locs.get(&instruction.1.ip()) {
                     format_label(*idx, &mut label_name, function_name_len, ".loc");
-                    format_to!(out_str, "{}{}: #0x{:x}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
+                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
                 }
                 if let Some(idx) = loops.get(&instruction.1.ip()) {
                     format_label(*idx, &mut label_name, function_name_len, ".loop");
-                    format_to!(out_str, "{}{}: #0x{:x}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
+                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
                 }
                 let tabs = indent_vec[instruction.0] as isize;
                 formatter
@@ -277,6 +253,100 @@ impl Method {
             }
             
             *out_str += "\n";
+        }
+    }
+    pub fn get_locs_loops_calls_endret(&self, instructions: &[Instruction], meta: &IL2CppDumper) -> (HashMap<u64, usize>, HashMap<u64, usize>, HashMap<u64, usize>, usize) {
+        let mut locs:          HashMap<u64, usize> = HashMap::with_capacity(32);
+        let mut loops:         HashMap<u64, usize> = HashMap::with_capacity(32);
+        let mut unknown_calls: HashMap<u64, usize> = HashMap::with_capacity(32);
+        
+        let mut last_ret_idx = 0usize;
+        let mut last_loc_ip  = 0u64;
+        for instruction in instructions.iter().enumerate() {
+            match instruction.1.flow_control() {
+                FlowControl::UnconditionalBranch |
+                FlowControl::ConditionalBranch => {
+                    let addr = instruction.1.near_branch64();
+                    if addr >= self.addr && addr <= self.addr + self.len {
+                        if instruction.1.next_ip() <= addr {
+                            if !locs.contains_key(&addr) {
+                                last_loc_ip  = max(addr, last_loc_ip);
+                                locs.insert(addr, locs.len());
+                            }
+                        } else if !locs.contains_key(&addr) {
+                            loops.insert(addr, loops.len());
+                        }
+                    }
+                }
+                FlowControl::Call => {
+                    let addr = instruction.1.near_branch64();
+                    if !meta.method_addr_table.contains_key(&addr) && !unknown_calls.contains_key(&addr) {
+                        let len = unknown_calls.len();
+                        unknown_calls.insert(addr, len);
+                    }
+                }
+                FlowControl::Return |
+                FlowControl::Interrupt => {
+                    if last_loc_ip <= instruction.1.ip() {
+                        last_ret_idx = instruction.0;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        (locs, loops, unknown_calls, last_ret_idx)
+    }
+    
+    pub fn get_local_syms(&self, off: i64, meta: &IL2CppDumper) -> HashMap<String, u64> {
+        let mut ret   = HashMap::with_capacity(48);
+        let start_off = meta.pe.map_v2p(self.addr).unwrap();
+        let decoder   = Decoder::with_ip(
+            64,
+            &meta.assembly[start_off .. start_off + self.len as usize],
+            self.addr,
+            DecoderOptions::NO_INVALID_CHECK
+        );
+        let instructions: Vec<Instruction> = decoder.into_iter().collect();
+        
+        let mut label_name    = String::from("\"") + &self.name_short(meta);
+        let function_name_len = label_name.len();
+        
+        let (locs, loops, _calls, _endret) = self.get_locs_loops_calls_endret(&instructions, meta);
+        
+        for (addr, idx) in locs {
+            format_label(idx, &mut label_name, function_name_len, ".loc");
+            ret.insert(label_name.clone(), (addr as i64 + off) as u64);
+        }
+        
+        for (addr, idx) in loops {
+            format_label(idx, &mut label_name, function_name_len, ".loop");
+            ret.insert(label_name.clone(), (addr as i64 + off) as u64);
+        }
+        
+        ret.shrink_to_fit();
+        ret
+    }
+    
+    pub fn get_calls(&self, meta: &IL2CppDumper, off: i64, table: &mut HashMap<String, u64>) {
+        let start_off = meta.pe.map_v2p(self.addr).unwrap();
+        let decoder   = Decoder::with_ip(
+            64,
+            &meta.assembly[start_off .. start_off + self.len as usize],
+            self.addr,
+            DecoderOptions::NO_INVALID_CHECK
+        );
+        let instructions: Vec<Instruction> = decoder.into_iter().collect();
+        
+        let mut label_name    = String::from("\"") + &self.name_short(meta);
+        let function_name_len = label_name.len();
+        
+        let (_locs, _loops, calls, _endret) = self.get_locs_loops_calls_endret(&instructions, meta);
+        
+        for (addr, idx) in calls {
+            format_label(idx, &mut label_name, function_name_len, ".unknown_call");
+            table.insert(label_name.clone(), (addr as i64 + off) as u64);
         }
     }
 }
@@ -433,7 +503,7 @@ impl RegData {
                             &meta.type_definitions.as_slice_of(&meta.metadata)
                             [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                         );
-                        let (field, field_off) = strukt.get_field_type_at_off(struct_idx, instruction.memory_displacement64(), meta)?;
+                        let (field, field_off, _) = strukt.get_field_type_at_off(struct_idx, instruction.memory_displacement64(), meta)?;
                         if field_off == instruction.memory_displacement32() {
                             let strukt_idx = meta.types_array[field.type_idx as usize].get_struct()?;
                             let strukt = IL2CppStruct::from_bytes(

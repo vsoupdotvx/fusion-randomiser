@@ -13,23 +13,29 @@ fn main() {
             .unwrap()
             .path();
         
-        let path_vec = cc::Build::new()
-            .file(path.clone())
-            .debug(true)
-            .compile_intermediates();
-        
-        fs::rename(
-            path_vec[0].clone(),
-            format!("{}/{}.o",
-                out_dir,
-                path
-                    .as_path()
-                    .file_stem()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-            )
-        ).expect("Failed to rename file");
+        if let Some(extension) = path.extension() {
+            if extension == "s" {
+                
+                let path_vec = cc::Build::new()
+                    .asm_flag("-fPIC")
+                    .file(path.clone())
+                    .debug(true)
+                    .compile_intermediates();
+                
+                fs::rename(
+                    path_vec[0].clone(),
+                    format!("{}/{}.o",
+                        out_dir,
+                        path
+                            .as_path()
+                            .file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                    )
+                ).expect("Failed to rename file");
+            }
+        }
     }
     
 }

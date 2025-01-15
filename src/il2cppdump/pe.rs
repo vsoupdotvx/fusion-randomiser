@@ -4,6 +4,7 @@ use super::util::OffSiz;
 use smallvec::SmallVec;
 
 
+#[derive(Clone)]
 pub struct Pe {
     pub sections:              HashMap<String,PeSection>,
     pub base:                  u64,
@@ -11,6 +12,7 @@ pub struct Pe {
     pub metadata_registration: usize,
 }
 
+#[derive(Clone)]
 pub struct PeSection {
     pub name:    String,
     pub vrange:  OffSiz,

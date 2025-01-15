@@ -9,6 +9,7 @@ macro_rules! format_to {
     };
 }
 
+#[derive(Clone)]
 pub struct OffSiz {
     pub off: u32,
     pub siz: u32,

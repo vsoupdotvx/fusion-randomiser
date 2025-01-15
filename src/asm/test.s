@@ -1,17 +1,25 @@
 .section .text
-#"il2cppfunction1+0x38":
-#    nop
-#    il2cppfunction1.locA:
-#        call il2cppfunction2
-#        movl il2cppstructoffset(%rax), %eax
-#        
-#    jmp  il2cppfunction1.locA
-#    nop
-"InGameUIMgr::UnlockCard(&mut self, theSeedType: i32) -> bool+0xb1": #0x58 bytes
-	movq   $order_lut,  %rax #10
-	movzbl (%rax,%rbp), %eax #3
-	cmpl   %ebp,  0x20(%rsi) #3
-	jne    "InGameUIMgr::UnlockCard.locE" #2
-	movq   %rsi,        %rcx #3
-	.nops  0x43
-	
+
+adventure_level_enter_2:
+	leaq   level_lut(%rip), %rcx
+	movzbl (%rcx,%rdx),     %edx
+	xorq   %r8,              %r8
+	#hlt
+	#insb
+	hlt
+	movl   InGameUIMgr.ShowZombieHealth(%rbx), %ecx
+	#insb
+	ret
+things_to_test:
+#	subl   $a+1,       b(%rax)
+#	movl   $0,         c(%rax)
+	insb
+	addl $1, level_lut(%rip)
+	call adventure_level_enter
+	insb
+	jmp  adventure_level_enter
+	#insb
+	jne  adventure_level_enter
+#	movabs $d,            %rax
+#	movabs $plant_lut,    %rax
+#	addl   $3, plant_lut(%rip)
