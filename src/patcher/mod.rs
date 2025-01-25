@@ -241,7 +241,7 @@ impl Patch {
                         16 => i16::from_le_bytes(data_section_data[off..off+2].try_into().unwrap()) as i64,
                         32 => i32::from_le_bytes(data_section_data[off..off+4].try_into().unwrap()) as i64,
                         64 => i64::from_le_bytes(data_section_data[off..off+8].try_into().unwrap()),
-                        _ => panic!("Unexpected relocation size")
+                        other => panic!("Unexpected relocation size: {other}")
                     },
                     false,
                 ));
@@ -378,8 +378,11 @@ impl Patch {
         }
         
         meta.get_field_offsets(&mut il2cpp_syms);
+        meta.get_enum_variants(&mut il2cpp_syms);
         
         il2cpp_syms.shrink_to_fit();
+        
+        //println!("{il2cpp_syms:#?}");
         
         let mut section_offs: Vec<(u64, u64)> = Vec::with_capacity(patches.len());
         let mut data_section_off = fusion.asm_offset;
@@ -569,16 +572,16 @@ impl Patch {
         //I was having some difficulty with the second mapping, so I'm beind lazy and doing one RWX mapping
         fusion.allocate_memory(fusion.asm_offset, data_section_size + text_section_size, PAGE_EXECUTE_READWRITE);
         
-        let mut sym_tab: HashMap<String,u64> = HashMap::new();
+        //let mut sym_tab: HashMap<String,u64> = HashMap::new();
         
         for (patch_idx, patch) in patches.iter().enumerate() {
             for (sym_name, sym_location) in &patch.patch_syms {
                 match sym_location {
                     PatchSymbolLocation::Text(instruction_idx) => {
-                        sym_tab.insert(sym_name.clone(), section_offs[patch_idx].1 + text_off_vecs[patch_idx][*instruction_idx] as u64);
+                        il2cpp_syms.insert(sym_name.clone(), section_offs[patch_idx].1 + text_off_vecs[patch_idx][*instruction_idx] as u64);
                     }
                     PatchSymbolLocation::Data(off) => {
-                        sym_tab.insert(sym_name.clone(), section_offs[patch_idx].0 + off);
+                        il2cpp_syms.insert(sym_name.clone(), section_offs[patch_idx].0 + off);
                     }
                 }
             }
@@ -600,7 +603,7 @@ impl Patch {
                             &patch.imm_vec,
                             instruction_offsets,
                             *text_section_off,
-                            &sym_tab,
+                            &il2cpp_syms,
                             None,
                             None,
                             None,
@@ -613,11 +616,6 @@ impl Patch {
         }
         
         let code = encoder.take_buffer();
-        
-        for byte in &code {
-            print!("{:02X} ", byte);
-        }
-        println!("");
         
         fusion.write_memory(fusion.asm_offset + data_section_size, &code);
         
@@ -632,7 +630,11 @@ impl Patch {
                         Immediate::PatchInstructionOffset(_, _) => panic!("Patch instruction offset found in data section"),
                         Immediate::InstructionOffset(idx) |
                         Immediate::InstructionOffsetCall(idx) => text_off_vecs[patch_idx][*idx] as u64 + section_offs[patch_idx].1,
-                        Immediate::UnresolvedSymbol(name, addend) => (*sym_tab.get(name).expect("Could not find unresolved symbol {name}") as i64 + *addend) as u64,
+                        Immediate::UnresolvedSymbol(name, addend) =>
+                            match il2cpp_syms.get(name) {
+                                None => panic!("Could not find unresolved symbol {name}"),
+                                Some(x) => (*x as i64 + *addend) as u64,
+                            }
                         _ => panic!("Weird data relocation type")
                     };
                     match data_reloc.size {
@@ -792,7 +794,7 @@ impl Patch {
                                 &patch.imm_vec,
                                 &text_off_vecs[patch_idx],
                                 *text_section_off,
-                                &sym_tab,
+                                &il2cpp_syms,
                                 Some(&instruction_offsets_2),
                                 Some(NonZeroU64::new(injection.off).unwrap()),
                                 Some(&local_syms),
@@ -808,7 +810,7 @@ impl Patch {
             }
         }
         
-        sym_tab
+        il2cpp_syms
     }
 }
 
@@ -1122,10 +1124,17 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                 let immediate = &imm_vec[instruction.immediate(i as u32) as usize];
                 match immediate {
                     Immediate::Immediate(value) => {
-                        let fits_into_i8  =  i8::try_from(*value).is_ok();
-                        let fits_into_i32 = i32::try_from(*value).is_ok();
+                        let fits_into_i8  =  i8::try_from(*value as i64).is_ok();
+                        let fits_into_i32 = i32::try_from(*value as i64).is_ok();
                         let mut opcode = instruction.code();
+                        let mut imm = OpKind::Register;
                         opcode = if fits_into_i8 {
+                            imm = match instruction.op1_kind() {
+                                OpKind::Immediate16 => OpKind::Immediate8to16,
+                                OpKind::Immediate32 => OpKind::Immediate8to32,
+                                OpKind::Immediate64 => OpKind::Immediate8to64,
+                                _ => OpKind::Register
+                            };
                             match opcode {
                                 Code::Adc_rm16_imm16 => Code::Adc_rm16_imm8,
                                 Code::Adc_rm32_imm32 => Code::Adc_rm32_imm8,
@@ -1155,9 +1164,15 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                                 Code::Xor_rm16_imm16 => Code::Xor_rm16_imm8,
                                 Code::Xor_rm32_imm32 => Code::Xor_rm32_imm8,
                                 Code::Xor_rm64_imm32 => Code::Xor_rm64_imm8,
-                                other => other
+                                other => {imm = OpKind::Register; other}
                             }
                         } else {
+                            imm = match instruction.op1_kind() {
+                                OpKind::Immediate8to16 => OpKind::Immediate16,
+                                OpKind::Immediate8to32 => OpKind::Immediate32,
+                                OpKind::Immediate8to64 => OpKind::Immediate64,
+                                _ => OpKind::Register
+                            };
                             match opcode {
                                 Code::Adc_rm16_imm8 => Code::Adc_rm16_imm16,
                                 Code::Adc_rm32_imm8 => Code::Adc_rm32_imm32,
@@ -1187,53 +1202,61 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                                 Code::Xor_rm16_imm8 => Code::Xor_rm16_imm16,
                                 Code::Xor_rm32_imm8 => Code::Xor_rm32_imm32,
                                 Code::Xor_rm64_imm8 => Code::Xor_rm64_imm32,
-                                other => other
+                                other => {imm = OpKind::Register; other}
                             }
                         };
-                        opcode = match opcode {
+                        (opcode, imm) = match opcode {
                             Code::Mov_r64_imm64 |
                             Code::Mov_rm64_imm32 => {
                                 if fits_into_i32 {
-                                    Code::Mov_rm64_imm32
+                                    (Code::Mov_rm64_imm32, OpKind::Immediate32to64)
                                 } else {
-                                    Code::Mov_r64_imm64
+                                    (Code::Mov_r64_imm64, OpKind::Immediate64)
                                 }
                             }
-                            other => other
+                            other => (other, imm) //ignore value
                         };
                         instruction.set_code(opcode);
+                        match imm {
+                            OpKind::Register => {}
+                            _ => match instruction.mnemonic() {
+                                Mnemonic::Imul => instruction.set_op2_kind(imm),
+                                Mnemonic::Push => instruction.set_op0_kind(imm),
+                                _              => instruction.set_op1_kind(imm),
+                            }
+                        }
                     }
                     _ => {
                         match instruction.code() {
-                            Code::Adc_rm16_imm8 => instruction.set_code(Code::Adc_rm16_imm16),
-                            Code::Adc_rm32_imm8 => instruction.set_code(Code::Adc_rm32_imm32),
-                            Code::Adc_rm64_imm8 => instruction.set_code(Code::Adc_rm64_imm32),
-                            Code::Add_rm16_imm8 => instruction.set_code(Code::Add_rm16_imm16),
-                            Code::Add_rm32_imm8 => instruction.set_code(Code::Add_rm32_imm32),
-                            Code::Add_rm64_imm8 => instruction.set_code(Code::Add_rm64_imm32),
-                            Code::And_rm16_imm8 => instruction.set_code(Code::And_rm16_imm16),
-                            Code::And_rm32_imm8 => instruction.set_code(Code::And_rm32_imm32),
-                            Code::And_rm64_imm8 => instruction.set_code(Code::And_rm64_imm32),
-                            Code::Cmp_rm16_imm8 => instruction.set_code(Code::Cmp_rm16_imm16),
-                            Code::Cmp_rm32_imm8 => instruction.set_code(Code::Cmp_rm32_imm32),
-                            Code::Cmp_rm64_imm8 => instruction.set_code(Code::Cmp_rm64_imm32),
-                            Code::Imul_r16_rm16_imm8 => instruction.set_code(Code::Imul_r16_rm16_imm16),
-                            Code::Imul_r32_rm32_imm8 => instruction.set_code(Code::Imul_r32_rm32_imm32),
-                            Code::Imul_r64_rm64_imm8 => instruction.set_code(Code::Imul_r64_rm64_imm32),
-                            Code::Mov_r32_imm32 => instruction.set_code(Code::Mov_r64_imm64),
-                            Code::Or_rm16_imm8 => instruction.set_code(Code::Or_rm16_imm16),
-                            Code::Or_rm32_imm8 => instruction.set_code(Code::Or_rm32_imm32),
-                            Code::Or_rm64_imm8 => instruction.set_code(Code::Or_rm64_imm32),
-                            Code::Pushq_imm8 => instruction.set_code(Code::Pushq_imm32),
-                            Code::Sbb_rm16_imm8 => instruction.set_code(Code::Sbb_rm16_imm16),
-                            Code::Sbb_rm32_imm8 => instruction.set_code(Code::Sbb_rm32_imm32),
-                            Code::Sbb_rm64_imm8 => instruction.set_code(Code::Sbb_rm64_imm32),
-                            Code::Sub_rm16_imm8 => instruction.set_code(Code::Sub_rm16_imm16),
-                            Code::Sub_rm32_imm8 => instruction.set_code(Code::Sub_rm32_imm32),
-                            Code::Sub_rm64_imm8 => instruction.set_code(Code::Sub_rm64_imm32),
-                            Code::Xor_rm16_imm8 => instruction.set_code(Code::Xor_rm16_imm16),
-                            Code::Xor_rm32_imm8 => instruction.set_code(Code::Xor_rm32_imm32),
-                            Code::Xor_rm64_imm8 => instruction.set_code(Code::Xor_rm64_imm32),
+                            Code::Adc_rm16_imm8 => {instruction.set_code(Code::Adc_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Adc_rm32_imm8 => {instruction.set_code(Code::Adc_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Adc_rm64_imm8 => {instruction.set_code(Code::Adc_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Add_rm16_imm8 => {instruction.set_code(Code::Add_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Add_rm32_imm8 => {instruction.set_code(Code::Add_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Add_rm64_imm8 => {instruction.set_code(Code::Add_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::And_rm16_imm8 => {instruction.set_code(Code::And_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::And_rm32_imm8 => {instruction.set_code(Code::And_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::And_rm64_imm8 => {instruction.set_code(Code::And_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Cmp_rm16_imm8 => {instruction.set_code(Code::Cmp_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Cmp_rm32_imm8 => {instruction.set_code(Code::Cmp_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Cmp_rm64_imm8 => {instruction.set_code(Code::Cmp_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Imul_r16_rm16_imm8 => {instruction.set_code(Code::Imul_r16_rm16_imm16); instruction.set_op2_kind(OpKind::Immediate16)},
+                            Code::Imul_r32_rm32_imm8 => {instruction.set_code(Code::Imul_r32_rm32_imm32); instruction.set_op2_kind(OpKind::Immediate32)},
+                            Code::Imul_r64_rm64_imm8 => {instruction.set_code(Code::Imul_r64_rm64_imm32); instruction.set_op2_kind(OpKind::Immediate32to64)},
+                            Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
+                            Code::Or_rm16_imm8 => {instruction.set_code(Code::Or_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Or_rm32_imm8 => {instruction.set_code(Code::Or_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Or_rm64_imm8 => {instruction.set_code(Code::Or_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Pushq_imm8 => {instruction.set_code(Code::Pushq_imm32); instruction.set_op0_kind(OpKind::Immediate32to64)},
+                            Code::Sbb_rm16_imm8 => {instruction.set_code(Code::Sbb_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Sbb_rm32_imm8 => {instruction.set_code(Code::Sbb_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Sbb_rm64_imm8 => {instruction.set_code(Code::Sbb_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Sub_rm16_imm8 => {instruction.set_code(Code::Sub_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Sub_rm32_imm8 => {instruction.set_code(Code::Sub_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Sub_rm64_imm8 => {instruction.set_code(Code::Sub_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+                            Code::Xor_rm16_imm8 => {instruction.set_code(Code::Xor_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+                            Code::Xor_rm32_imm8 => {instruction.set_code(Code::Xor_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+                            Code::Xor_rm64_imm8 => {instruction.set_code(Code::Xor_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
                             _ => {}
                         }
                         break;
@@ -1247,35 +1270,35 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
 
 fn change_imm_size_large(instruction: &mut Instruction) {
     match instruction.code() {
-        Code::Adc_rm16_imm8 => instruction.set_code(Code::Adc_rm16_imm16),
-        Code::Adc_rm32_imm8 => instruction.set_code(Code::Adc_rm32_imm32),
-        Code::Adc_rm64_imm8 => instruction.set_code(Code::Adc_rm64_imm32),
-        Code::Add_rm16_imm8 => instruction.set_code(Code::Add_rm16_imm16),
-        Code::Add_rm32_imm8 => instruction.set_code(Code::Add_rm32_imm32),
-        Code::Add_rm64_imm8 => instruction.set_code(Code::Add_rm64_imm32),
-        Code::And_rm16_imm8 => instruction.set_code(Code::And_rm16_imm16),
-        Code::And_rm32_imm8 => instruction.set_code(Code::And_rm32_imm32),
-        Code::And_rm64_imm8 => instruction.set_code(Code::And_rm64_imm32),
-        Code::Cmp_rm16_imm8 => instruction.set_code(Code::Cmp_rm16_imm16),
-        Code::Cmp_rm32_imm8 => instruction.set_code(Code::Cmp_rm32_imm32),
-        Code::Cmp_rm64_imm8 => instruction.set_code(Code::Cmp_rm64_imm32),
-        Code::Imul_r16_rm16_imm8 => instruction.set_code(Code::Imul_r16_rm16_imm16),
-        Code::Imul_r32_rm32_imm8 => instruction.set_code(Code::Imul_r32_rm32_imm32),
-        Code::Imul_r64_rm64_imm8 => instruction.set_code(Code::Imul_r64_rm64_imm32),
-        Code::Mov_r32_imm32 => instruction.set_code(Code::Mov_r64_imm64),
-        Code::Or_rm16_imm8 => instruction.set_code(Code::Or_rm16_imm16),
-        Code::Or_rm32_imm8 => instruction.set_code(Code::Or_rm32_imm32),
-        Code::Or_rm64_imm8 => instruction.set_code(Code::Or_rm64_imm32),
-        Code::Pushq_imm8 => instruction.set_code(Code::Pushq_imm32),
-        Code::Sbb_rm16_imm8 => instruction.set_code(Code::Sbb_rm16_imm16),
-        Code::Sbb_rm32_imm8 => instruction.set_code(Code::Sbb_rm32_imm32),
-        Code::Sbb_rm64_imm8 => instruction.set_code(Code::Sbb_rm64_imm32),
-        Code::Sub_rm16_imm8 => instruction.set_code(Code::Sub_rm16_imm16),
-        Code::Sub_rm32_imm8 => instruction.set_code(Code::Sub_rm32_imm32),
-        Code::Sub_rm64_imm8 => instruction.set_code(Code::Sub_rm64_imm32),
-        Code::Xor_rm16_imm8 => instruction.set_code(Code::Xor_rm16_imm16),
-        Code::Xor_rm32_imm8 => instruction.set_code(Code::Xor_rm32_imm32),
-        Code::Xor_rm64_imm8 => instruction.set_code(Code::Xor_rm64_imm32),
+        Code::Adc_rm16_imm8 => {instruction.set_code(Code::Adc_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Adc_rm32_imm8 => {instruction.set_code(Code::Adc_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Adc_rm64_imm8 => {instruction.set_code(Code::Adc_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Add_rm16_imm8 => {instruction.set_code(Code::Add_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Add_rm32_imm8 => {instruction.set_code(Code::Add_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Add_rm64_imm8 => {instruction.set_code(Code::Add_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::And_rm16_imm8 => {instruction.set_code(Code::And_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::And_rm32_imm8 => {instruction.set_code(Code::And_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::And_rm64_imm8 => {instruction.set_code(Code::And_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Cmp_rm16_imm8 => {instruction.set_code(Code::Cmp_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Cmp_rm32_imm8 => {instruction.set_code(Code::Cmp_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Cmp_rm64_imm8 => {instruction.set_code(Code::Cmp_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Imul_r16_rm16_imm8 => {instruction.set_code(Code::Imul_r16_rm16_imm16); instruction.set_op2_kind(OpKind::Immediate16)},
+        Code::Imul_r32_rm32_imm8 => {instruction.set_code(Code::Imul_r32_rm32_imm32); instruction.set_op2_kind(OpKind::Immediate32)},
+        Code::Imul_r64_rm64_imm8 => {instruction.set_code(Code::Imul_r64_rm64_imm32); instruction.set_op2_kind(OpKind::Immediate32to64)},
+        Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
+        Code::Or_rm16_imm8 => {instruction.set_code(Code::Or_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Or_rm32_imm8 => {instruction.set_code(Code::Or_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Or_rm64_imm8 => {instruction.set_code(Code::Or_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Pushq_imm8 => {instruction.set_code(Code::Pushq_imm32); instruction.set_op0_kind(OpKind::Immediate32to64)},
+        Code::Sbb_rm16_imm8 => {instruction.set_code(Code::Sbb_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Sbb_rm32_imm8 => {instruction.set_code(Code::Sbb_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Sbb_rm64_imm8 => {instruction.set_code(Code::Sbb_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Sub_rm16_imm8 => {instruction.set_code(Code::Sub_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Sub_rm32_imm8 => {instruction.set_code(Code::Sub_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Sub_rm64_imm8 => {instruction.set_code(Code::Sub_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Xor_rm16_imm8 => {instruction.set_code(Code::Xor_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Xor_rm32_imm8 => {instruction.set_code(Code::Xor_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Xor_rm64_imm8 => {instruction.set_code(Code::Xor_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
         _ => {}
     }
     for op in instruction.op_kinds() {
@@ -1292,35 +1315,35 @@ fn change_imm_size_large(instruction: &mut Instruction) {
 
 fn change_imm_size_dword(instruction: &mut Instruction) {
     match instruction.code() {
-        Code::Adc_rm16_imm8 => instruction.set_code(Code::Adc_rm16_imm16),
-        Code::Adc_rm32_imm8 => instruction.set_code(Code::Adc_rm32_imm32),
-        Code::Adc_rm64_imm8 => instruction.set_code(Code::Adc_rm64_imm32),
-        Code::Add_rm16_imm8 => instruction.set_code(Code::Add_rm16_imm16),
-        Code::Add_rm32_imm8 => instruction.set_code(Code::Add_rm32_imm32),
-        Code::Add_rm64_imm8 => instruction.set_code(Code::Add_rm64_imm32),
-        Code::And_rm16_imm8 => instruction.set_code(Code::And_rm16_imm16),
-        Code::And_rm32_imm8 => instruction.set_code(Code::And_rm32_imm32),
-        Code::And_rm64_imm8 => instruction.set_code(Code::And_rm64_imm32),
-        Code::Cmp_rm16_imm8 => instruction.set_code(Code::Cmp_rm16_imm16),
-        Code::Cmp_rm32_imm8 => instruction.set_code(Code::Cmp_rm32_imm32),
-        Code::Cmp_rm64_imm8 => instruction.set_code(Code::Cmp_rm64_imm32),
-        Code::Imul_r16_rm16_imm8 => instruction.set_code(Code::Imul_r16_rm16_imm16),
-        Code::Imul_r32_rm32_imm8 => instruction.set_code(Code::Imul_r32_rm32_imm32),
-        Code::Imul_r64_rm64_imm8 => instruction.set_code(Code::Imul_r64_rm64_imm32),
-        Code::Mov_r64_imm64 => instruction.set_code(Code::Mov_rm64_imm32),
-        Code::Or_rm16_imm8 => instruction.set_code(Code::Or_rm16_imm16),
-        Code::Or_rm32_imm8 => instruction.set_code(Code::Or_rm32_imm32),
-        Code::Or_rm64_imm8 => instruction.set_code(Code::Or_rm64_imm32),
-        Code::Pushq_imm8 => instruction.set_code(Code::Pushq_imm32),
-        Code::Sbb_rm16_imm8 => instruction.set_code(Code::Sbb_rm16_imm16),
-        Code::Sbb_rm32_imm8 => instruction.set_code(Code::Sbb_rm32_imm32),
-        Code::Sbb_rm64_imm8 => instruction.set_code(Code::Sbb_rm64_imm32),
-        Code::Sub_rm16_imm8 => instruction.set_code(Code::Sub_rm16_imm16),
-        Code::Sub_rm32_imm8 => instruction.set_code(Code::Sub_rm32_imm32),
-        Code::Sub_rm64_imm8 => instruction.set_code(Code::Sub_rm64_imm32),
-        Code::Xor_rm16_imm8 => instruction.set_code(Code::Xor_rm16_imm16),
-        Code::Xor_rm32_imm8 => instruction.set_code(Code::Xor_rm32_imm32),
-        Code::Xor_rm64_imm8 => instruction.set_code(Code::Xor_rm64_imm32),
+        Code::Adc_rm16_imm8 => {instruction.set_code(Code::Adc_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Adc_rm32_imm8 => {instruction.set_code(Code::Adc_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Adc_rm64_imm8 => {instruction.set_code(Code::Adc_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Add_rm16_imm8 => {instruction.set_code(Code::Add_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Add_rm32_imm8 => {instruction.set_code(Code::Add_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Add_rm64_imm8 => {instruction.set_code(Code::Add_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::And_rm16_imm8 => {instruction.set_code(Code::And_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::And_rm32_imm8 => {instruction.set_code(Code::And_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::And_rm64_imm8 => {instruction.set_code(Code::And_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Cmp_rm16_imm8 => {instruction.set_code(Code::Cmp_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Cmp_rm32_imm8 => {instruction.set_code(Code::Cmp_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Cmp_rm64_imm8 => {instruction.set_code(Code::Cmp_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Imul_r16_rm16_imm8 => {instruction.set_code(Code::Imul_r16_rm16_imm16); instruction.set_op2_kind(OpKind::Immediate16)},
+        Code::Imul_r32_rm32_imm8 => {instruction.set_code(Code::Imul_r32_rm32_imm32); instruction.set_op2_kind(OpKind::Immediate32)},
+        Code::Imul_r64_rm64_imm8 => {instruction.set_code(Code::Imul_r64_rm64_imm32); instruction.set_op2_kind(OpKind::Immediate32to64)},
+        Code::Mov_r64_imm64 => {instruction.set_code(Code::Mov_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Or_rm16_imm8 => {instruction.set_code(Code::Or_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Or_rm32_imm8 => {instruction.set_code(Code::Or_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Or_rm64_imm8 => {instruction.set_code(Code::Or_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Pushq_imm8 => {instruction.set_code(Code::Pushq_imm32); instruction.set_op0_kind(OpKind::Immediate32to64)},
+        Code::Sbb_rm16_imm8 => {instruction.set_code(Code::Sbb_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Sbb_rm32_imm8 => {instruction.set_code(Code::Sbb_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Sbb_rm64_imm8 => {instruction.set_code(Code::Sbb_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Sub_rm16_imm8 => {instruction.set_code(Code::Sub_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Sub_rm32_imm8 => {instruction.set_code(Code::Sub_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Sub_rm64_imm8 => {instruction.set_code(Code::Sub_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Xor_rm16_imm8 => {instruction.set_code(Code::Xor_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
+        Code::Xor_rm32_imm8 => {instruction.set_code(Code::Xor_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
+        Code::Xor_rm64_imm8 => {instruction.set_code(Code::Xor_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
         _ => {}
     }
     for op in instruction.op_kinds() {
@@ -1337,35 +1360,35 @@ fn change_imm_size_dword(instruction: &mut Instruction) {
 
 fn change_imm_size_small(instruction: &mut Instruction) {
     match instruction.code() {
-        Code::Adc_rm16_imm16 => instruction.set_code(Code::Adc_rm16_imm8),
-        Code::Adc_rm32_imm32 => instruction.set_code(Code::Adc_rm32_imm8),
-        Code::Adc_rm64_imm32 => instruction.set_code(Code::Adc_rm64_imm8),
-        Code::Add_rm16_imm16 => instruction.set_code(Code::Add_rm16_imm8),
-        Code::Add_rm32_imm32 => instruction.set_code(Code::Add_rm32_imm8),
-        Code::Add_rm64_imm32 => instruction.set_code(Code::Add_rm64_imm8),
-        Code::And_rm16_imm16 => instruction.set_code(Code::And_rm16_imm8),
-        Code::And_rm32_imm32 => instruction.set_code(Code::And_rm32_imm8),
-        Code::And_rm64_imm32 => instruction.set_code(Code::And_rm64_imm8),
-        Code::Cmp_rm16_imm16 => instruction.set_code(Code::Cmp_rm16_imm8),
-        Code::Cmp_rm32_imm32 => instruction.set_code(Code::Cmp_rm32_imm8),
-        Code::Cmp_rm64_imm32 => instruction.set_code(Code::Cmp_rm64_imm8),
-        Code::Imul_r16_rm16_imm16 => instruction.set_code(Code::Imul_r16_rm16_imm8),
-        Code::Imul_r32_rm32_imm32 => instruction.set_code(Code::Imul_r32_rm32_imm8),
-        Code::Imul_r64_rm64_imm32 => instruction.set_code(Code::Imul_r64_rm64_imm8),
-        Code::Mov_r64_imm64 => instruction.set_code(Code::Mov_rm64_imm32),
-        Code::Or_rm16_imm16 => instruction.set_code(Code::Or_rm16_imm8),
-        Code::Or_rm32_imm32 => instruction.set_code(Code::Or_rm32_imm8),
-        Code::Or_rm64_imm32 => instruction.set_code(Code::Or_rm64_imm8),
-        Code::Pushq_imm32 => instruction.set_code(Code::Pushq_imm8),
-        Code::Sbb_rm16_imm16 => instruction.set_code(Code::Sbb_rm16_imm8),
-        Code::Sbb_rm32_imm32 => instruction.set_code(Code::Sbb_rm32_imm8),
-        Code::Sbb_rm64_imm32 => instruction.set_code(Code::Sbb_rm64_imm8),
-        Code::Sub_rm16_imm16 => instruction.set_code(Code::Sub_rm16_imm8),
-        Code::Sub_rm32_imm32 => instruction.set_code(Code::Sub_rm32_imm8),
-        Code::Sub_rm64_imm32 => instruction.set_code(Code::Sub_rm64_imm8),
-        Code::Xor_rm16_imm16 => instruction.set_code(Code::Xor_rm16_imm8),
-        Code::Xor_rm32_imm32 => instruction.set_code(Code::Xor_rm32_imm8),
-        Code::Xor_rm64_imm32 => instruction.set_code(Code::Xor_rm64_imm8),
+        Code::Adc_rm16_imm16 => {instruction.set_code(Code::Adc_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Adc_rm32_imm32 => {instruction.set_code(Code::Adc_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Adc_rm64_imm32 => {instruction.set_code(Code::Adc_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Add_rm16_imm16 => {instruction.set_code(Code::Add_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Add_rm32_imm32 => {instruction.set_code(Code::Add_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Add_rm64_imm32 => {instruction.set_code(Code::Add_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::And_rm16_imm16 => {instruction.set_code(Code::And_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::And_rm32_imm32 => {instruction.set_code(Code::And_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::And_rm64_imm32 => {instruction.set_code(Code::And_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Cmp_rm16_imm16 => {instruction.set_code(Code::Cmp_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Cmp_rm32_imm32 => {instruction.set_code(Code::Cmp_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Cmp_rm64_imm32 => {instruction.set_code(Code::Cmp_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Imul_r16_rm16_imm16 => {instruction.set_code(Code::Imul_r16_rm16_imm8); instruction.set_op2_kind(OpKind::Immediate8to16)},
+        Code::Imul_r32_rm32_imm32 => {instruction.set_code(Code::Imul_r32_rm32_imm8); instruction.set_op2_kind(OpKind::Immediate8to32)},
+        Code::Imul_r64_rm64_imm32 => {instruction.set_code(Code::Imul_r64_rm64_imm8); instruction.set_op2_kind(OpKind::Immediate8to64)},
+        Code::Mov_r64_imm64 => {instruction.set_code(Code::Mov_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
+        Code::Or_rm16_imm16 => {instruction.set_code(Code::Or_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Or_rm32_imm32 => {instruction.set_code(Code::Or_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Or_rm64_imm32 => {instruction.set_code(Code::Or_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Pushq_imm32 => {instruction.set_code(Code::Pushq_imm8); instruction.set_op0_kind(OpKind::Immediate8to64)},
+        Code::Sbb_rm16_imm16 => {instruction.set_code(Code::Sbb_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Sbb_rm32_imm32 => {instruction.set_code(Code::Sbb_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Sbb_rm64_imm32 => {instruction.set_code(Code::Sbb_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Sub_rm16_imm16 => {instruction.set_code(Code::Sub_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Sub_rm32_imm32 => {instruction.set_code(Code::Sub_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Sub_rm64_imm32 => {instruction.set_code(Code::Sub_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
+        Code::Xor_rm16_imm16 => {instruction.set_code(Code::Xor_rm16_imm8); instruction.set_op1_kind(OpKind::Immediate8to16)},
+        Code::Xor_rm32_imm32 => {instruction.set_code(Code::Xor_rm32_imm8); instruction.set_op1_kind(OpKind::Immediate8to32)},
+        Code::Xor_rm64_imm32 => {instruction.set_code(Code::Xor_rm64_imm8); instruction.set_op1_kind(OpKind::Immediate8to64)},
         _ => {}
     }
     for op in instruction.op_kinds() {

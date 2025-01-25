@@ -63,6 +63,7 @@ pub struct IL2CppDumper {
     pub methods_array:               Vec<Method>,
     pub methods_table:       HashMap<String,u32>,
     pub method_addr_table:      HashMap<u64,u32>,
+    field_default_lookup:       HashMap<i32,u32>,
     icgm_array:                        Vec<Icgm>,
     types_array:                 Vec<IL2CppType>,
     generic_class_array: Vec<IL2CppGenericClass>,
@@ -775,17 +776,19 @@ impl IL2CppStruct {
                 if self.bitfield & 0x1 != 0 && typ.attrs & 0x10 == 0 {
                     off = off.wrapping_sub(16);
                 }
-                if typ.attrs & 0x50 == 0 {
+                if typ.attrs & 0x40 == 0 {
                     let name = format!("{prefix}.{}", meta.get_string(field.name_off));
                     
-                    if recursion < 5 {
+                    if recursion < 2 {
                         if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
-                            let strukt = IL2CppStruct::from_bytes(
-                                &meta.type_definitions.as_slice_of(&meta.metadata)
-                                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
-                            );
-                            if strukt.flags & 0x2000 != 0 {
-                                strukt.get_field_offsets_internal(idx, recursion + 1, &name, meta, table);
+                            if idx != struct_idx {
+                                let strukt = IL2CppStruct::from_bytes(
+                                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                                );
+                                if strukt.flags & 0x2000 != 0 {
+                                    strukt.get_field_offsets_internal(idx, recursion + 1, &name, meta, table);
+                                }
                             }
                         }
                     }
@@ -793,6 +796,150 @@ impl IL2CppStruct {
                 }
             }
         }
+    }
+    
+    fn get_enum_stuff(&self, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+        
+        fn read_compressed_u32(meta: &IL2CppDumper, off: usize) -> u32 {
+            let byte = meta.metadata[off] as u32;
+            if byte & 0x80 == 0 {
+                byte
+            } else if byte & 0x40 == 0 {
+                (byte & 0x7F) << 8 | meta.metadata[off+1] as u32
+            } else if byte & 0x20 == 0 {
+                u32::from_be_bytes(meta.metadata[off..off+4].try_into().unwrap()) & 0x3FFF_FFFF
+            } else {
+                match byte {
+                    0xF0 => u32::from_le_bytes(meta.metadata[off+1..off+5].try_into().unwrap()),
+                    0xFE => u32::max_value() - 1,
+                    0xFF => u32::max_value(),
+                    other => panic!("Invalid compressed int start byte: {}", other)
+                }
+            }
+        }
+        
+        fn read_compressed_i32(meta: &IL2CppDumper, off: usize) -> i32 {
+            let int = read_compressed_u32(meta, off);
+            if int == u32::max_value() {
+                i32::min_value()
+            } else if int & 0x1 == 0 {
+                (int >> 1) as i32
+            } else {
+                -((int >> 1) as i32 + 1)
+            }
+        }
+        
+        if self.bitfield & 0x2 != 0 { //is enum
+            for field_idx in 0 .. self.field_count as usize {
+                let field = IL2CppField::from_bytes(
+                    &meta.fields.as_slice_of(&meta.metadata)
+                    [(self.field_start as usize + field_idx) * FIELD_STRIDE .. (self.field_start as usize + field_idx) * FIELD_STRIDE + FIELD_STRIDE]
+                );
+                let typ = &meta.types_array[field.type_idx as usize];
+                if typ.attrs & 0x50 != 0 || true { //is const
+                    //TODO: something
+                    if let Some(field_default_idx) = meta.field_default_lookup.get(&(field_idx as i32 + self.field_start)) {
+                        let il2cppdefault = IL2CppFieldDefault::from_bytes(
+                            &meta.field_defaults.as_slice_of(&meta.metadata)
+                            [*field_default_idx as usize * FIELD_DEFAULT_STRIDE .. *field_default_idx as usize * FIELD_DEFAULT_STRIDE + FIELD_DEFAULT_STRIDE]
+                        );
+                        //
+                        let typ2 = &meta.types_array[il2cppdefault.type_idx as usize];
+                        if il2cppdefault.data_off >= 0 {
+                            let off = il2cppdefault.data_off as usize + meta.field_parameter_defaults.off as usize;
+                            match typ2.kind {
+                                IL2CppTypeEnum::I8 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        meta.metadata[off] as i8 as i64 as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), meta.metadata[off] as i8 as i64 as u64);
+                                }
+                                IL2CppTypeEnum::U8 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        meta.metadata[off] as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), meta.metadata[off] as u64);
+                                }
+                                IL2CppTypeEnum::I16 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        i16::from_le_bytes(meta.metadata[off..off+2].try_into().unwrap()) as i64 as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), i16::from_le_bytes(meta.metadata[off..off+2].try_into().unwrap()) as i64 as u64);
+                                }
+                                IL2CppTypeEnum::U16 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        u16::from_le_bytes(meta.metadata[off..off+2].try_into().unwrap()) as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), u16::from_le_bytes(meta.metadata[off..off+2].try_into().unwrap()) as u64);
+                                }
+                                IL2CppTypeEnum::I32 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        read_compressed_i32(meta, off) as i64 as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), read_compressed_i32(meta, off) as i64 as u64);
+                                }
+                                IL2CppTypeEnum::U32 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        read_compressed_u32(meta, off) as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), read_compressed_u32(meta, off) as u64);
+                                }
+                                IL2CppTypeEnum::I64 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        i64::from_le_bytes(meta.metadata[off..off+8].try_into().unwrap()) as u64,
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), i64::from_le_bytes(meta.metadata[off..off+8].try_into().unwrap()) as u64);
+                                }
+                                IL2CppTypeEnum::U64 => {
+                                    table.insert(
+                                        format!("{}::{}", self.get_name(meta), meta.get_string(field.name_off)),
+                                        u64::from_le_bytes(meta.metadata[off..off+8].try_into().unwrap()),
+                                    );
+                                    //println!("{}::{} = {}", self.get_name(meta), meta.get_string(field.name_off), u64::from_le_bytes(meta.metadata[off..off+8].try_into().unwrap()));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    fn decode(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32) {
+        format_to!(out_str, "struct {} {{\n", self.get_name(meta));
+        //let mut field_offsets: Vec<(String, u64)> = Vec::with_capacity(self.field_count as usize);
+        
+        let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
+        if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
+            for field_idx in 0 .. self.field_count as usize {
+                let mut off = u32::from_le_bytes(meta.assembly[off_off + field_idx * 4 .. off_off + field_idx * 4 + 4].try_into().unwrap());
+                let field = IL2CppField::from_bytes(
+                    &meta.fields.as_slice_of(&meta.metadata)
+                    [(self.field_start as usize + field_idx) * FIELD_STRIDE .. (self.field_start as usize + field_idx) * FIELD_STRIDE + FIELD_STRIDE]
+                );
+                let typ = &meta.types_array[field.type_idx as usize];
+                if self.bitfield & 0x1 != 0 && typ.attrs & 0x10 == 0 {
+                    off = off.wrapping_sub(16);
+                }
+                
+                format_to!(out_str, "\t{}: {}, //0x{off:X}\n", meta.get_string(field.name_off), typ.name(meta).0);
+                
+                //if typ.attrs & 0x50 == 0 {
+                //    let name = format!("{prefix}.{}", );
+                //    table.insert(name, off as u64);
+                //}
+            }
+        }
+        
+        format_to!(out_str, "}}\n\n");
     }
 }
 
@@ -848,6 +995,7 @@ impl IL2CppImage {
 
 #[allow(dead_code)]
 #[derive(Clone)]
+#[repr(C)]
 struct IL2CppParameter {
     name_off: u32,
     token:    u32,
@@ -860,6 +1008,25 @@ impl IL2CppParameter {
             name_off: u32::from_le_bytes(data[0x00..0x04].try_into().unwrap()),
             token:    u32::from_le_bytes(data[0x04..0x08].try_into().unwrap()),
             type_idx: i32::from_le_bytes(data[0x08..0x0c].try_into().unwrap()),
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+#[repr(C)]
+struct IL2CppFieldDefault {
+    field_idx: i32,
+    type_idx:  i32,
+    data_off:  i32,
+}
+const FIELD_DEFAULT_STRIDE: usize = size_of::<IL2CppFieldDefault>();
+impl IL2CppFieldDefault {
+    fn from_bytes(data: &[u8]) -> Self {
+        Self {
+            field_idx: i32::from_le_bytes(data[0x00..0x04].try_into().unwrap()),
+            type_idx:  i32::from_le_bytes(data[0x04..0x08].try_into().unwrap()),
+            data_off:  i32::from_le_bytes(data[0x08..0x0c].try_into().unwrap()),
         }
     }
 }
@@ -939,6 +1106,7 @@ impl IL2CppDumper {
         //    println!("0x{code_gen_module_off:x} {name}: {function_cnt}");
         //}
         //println!("{acc}");
+        println!("0x{:X}", pe.map_v2p(0x181BF5E98).unwrap());
         
         let mut il2cpp = Self {
             string_literals:           OffSiz::from_bytes(&metadata[0x008..0x010]),
@@ -973,12 +1141,13 @@ impl IL2CppDumper {
             win_runtime_strings:       OffSiz::from_bytes(&metadata[0x0f0..0x0f8]),
             exported_type_definitions: OffSiz::from_bytes(&metadata[0x0f8..0x100]),
             
-            methods_array:         Vec::new(),
-            methods_table:     HashMap::new(),
-            method_addr_table: HashMap::new(),
-            icgm_array:            Vec::new(),
-            types_array:           Vec::new(),
-            generic_class_array:   Vec::new(),
+            methods_array:        Vec::new(),
+            methods_table:        HashMap::new(),
+            method_addr_table:    HashMap::new(),
+            field_default_lookup: HashMap::new(),
+            icgm_array:           Vec::new(),
+            types_array:          Vec::new(),
+            generic_class_array:  Vec::new(),
             
             code_reg,
             meta_reg,
@@ -1005,11 +1174,19 @@ impl IL2CppDumper {
         il2cpp.populate_types();
         il2cpp.populate_methods();
         
+        let mut out_str = String::new();
+        il2cpp.methods_array[*il2cpp.methods_table.get("InGameUIMgr::Awake(&mut self)").unwrap() as usize].decode(&il2cpp, &mut out_str);
+        
         let il2cpp_arc = Arc::new(il2cpp);
         
         match il2cpp_arc.output_disasm(concat!(env!("CARGO_MANIFEST_DIR"), "/out.s")) {
             Ok(())  => println!("Successfully output disasm"),
             Err(()) => println!("Failed to output disasm"),
+        }
+        
+        match il2cpp_arc.output_structs(concat!(env!("CARGO_MANIFEST_DIR"), "/out_structs.rs")) {
+            Ok(())  => println!("Successfully output structs"),
+            Err(()) => println!("Failed to output structs"),
         }
         
         Ok(Arc::into_inner(il2cpp_arc).unwrap())
@@ -1045,7 +1222,7 @@ impl IL2CppDumper {
     
     fn populate_methods(&mut self) {
         let method_cnt = self.methods.siz as usize / METHOD_STRIDE;
-        let typ_cnt    = self.type_definitions.siz as usize / STRUCT_STRIDE;
+        let struct_cnt = self.type_definitions.siz as usize / STRUCT_STRIDE;
         
         self.methods_array.reserve_exact(method_cnt);
         self.methods_table.reserve(method_cnt);
@@ -1062,7 +1239,7 @@ impl IL2CppDumper {
             }
         }
         
-        for i in 0..method_cnt {
+        for i in 0 .. method_cnt {
             let il2cppmethod = IL2CppMethod::from_bytes(&self.methods.as_slice_of(&self.metadata)[i*METHOD_STRIDE..i*METHOD_STRIDE+METHOD_STRIDE]);
             let method = Method {
                 metadata: il2cppmethod,
@@ -1074,7 +1251,7 @@ impl IL2CppDumper {
             self.methods_array.push(method);
         }
         
-        for i in 0..typ_cnt {
+        for i in 0 .. struct_cnt {
             let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);
             if il2cppstruct.method_start >= 0 && il2cppstruct.method_start + (il2cppstruct.method_count as i32) < method_cnt as i32 {
                 for j in 0..il2cppstruct.method_count as usize {
@@ -1173,15 +1350,24 @@ impl IL2CppDumper {
     }
     
     fn populate_types(&mut self) {
+        let field_default_cnt = self.field_defaults.siz as usize / FIELD_DEFAULT_STRIDE;
+        self.field_default_lookup.reserve(field_default_cnt);
         self.types_array.reserve_exact(self.meta_reg.types_cnt as usize);
         self.generic_class_array.reserve_exact(self.meta_reg.generic_classes_cnt as usize);
         
-        for i in 0..self.meta_reg.types_cnt as usize {
+        for i in 0 .. self.meta_reg.types_cnt as usize {
             let off = self.pe.map_v2p(u64::from_le_bytes(self.assembly[self.meta_reg.types+i*8..self.meta_reg.types+i*8+8].try_into().unwrap())).unwrap();
             let typ = IL2CppType::from_bytes(&self.assembly[off..off+12]);
             self.types_array.push(typ);
         }
         
+        for i in 0 ..field_default_cnt {
+            let il2cppdefault = IL2CppFieldDefault::from_bytes(
+                &self.field_defaults.as_slice_of(&self.metadata)
+                [i * FIELD_DEFAULT_STRIDE .. i * FIELD_DEFAULT_STRIDE + FIELD_DEFAULT_STRIDE]
+            );
+            self.field_default_lookup.insert(il2cppdefault.field_idx, i as u32);
+        }
     }
     
     fn get_arg_name(&self, idx: i32) -> (String, Option<u32>) {
@@ -1196,6 +1382,14 @@ impl IL2CppDumper {
         for i in 0..typ_cnt {
             let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);
             il2cppstruct.get_field_offsets(i as u32, self, table)
+        }
+    }
+    
+    pub fn get_enum_variants(&self, table: &mut HashMap<String, u64>) {
+        let typ_cnt    = self.type_definitions.siz as usize / STRUCT_STRIDE;
+        for i in 0..typ_cnt {
+            let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);
+            il2cppstruct.get_enum_stuff(self, table);
         }
     }
     
@@ -1250,6 +1444,88 @@ impl IL2CppDumper {
                             }
                             
                             il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
+                            
+                            {
+                                let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
+                                *string_mutex = Some(out_str.clone());
+                            }
+                            
+                            out_str.clear();
+                        }
+                    }
+                }));
+            }
+            for t in thread_vec {
+                t.join().unwrap();
+            }
+            
+            for s in string_vec.iter() {
+                out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
+            }
+        } else {
+            return Err(());
+        }
+        
+        Ok(())
+    }
+    
+    pub fn output_structs<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
+        let structs_len = self.type_definitions.siz as usize / STRUCT_STRIDE;
+        
+        let mut sorted: Vec<u32> = Vec::with_capacity(structs_len);
+        for i in 0..structs_len {
+            sorted.push(i as u32);
+        }
+        //sorted.sort_unstable_by_key(|x| self.methods_array[*x as usize].addr);
+        let sorted = Arc::new(sorted);
+        
+        if let Ok(out_s) = OpenOptions::new().create_new(true).truncate(true).write(true).open(out_path) {
+            let mut out_s = out_s;
+            
+            let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(structs_len);
+            for _ in 0..structs_len {
+                string_vec.push(Mutex::new(None));
+            }
+            let string_vec = Arc::new(string_vec);
+            
+            let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; structs_len]));
+            
+            //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
+            let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
+            let mut thread_vec = Vec::with_capacity(thread_cnt);
+            for _tidx in 0..thread_cnt {
+                thread_vec.push(thread::spawn({
+                    let string_vec_ref = Arc::clone(&string_vec);
+                    let a_bool_vec_ref = Arc::clone(&a_bool_vec);
+                    let sorted_ref     = Arc::clone(&sorted);
+                    let il2cpp_ref     = Arc::clone(self);
+                    move || {
+                        let mut current_idx = 0;
+                        let mut out_str = String::new();
+                        loop {
+                            loop {
+                                let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
+                                for i in current_idx..sorted_ref.len() {
+                                    let taken = bool_mutex.get_mut(i).unwrap();
+                                    if *taken {
+                                        current_idx = i + 1;
+                                    } else {
+                                        *taken = true;
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            
+                            if current_idx == sorted_ref.len() {
+                                break;
+                            }
+                            
+                            let strukt = IL2CppStruct::from_bytes(
+                                &il2cpp_ref.type_definitions.as_slice_of(&il2cpp_ref.metadata)[current_idx * STRUCT_STRIDE ..current_idx * STRUCT_STRIDE + STRUCT_STRIDE]
+                            );
+                            strukt.decode(&il2cpp_ref, &mut out_str, current_idx as u32);
+                            //il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
                             
                             {
                                 let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();

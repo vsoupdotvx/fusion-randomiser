@@ -260,15 +260,15 @@ impl Method {
         let mut loops:         HashMap<u64, usize> = HashMap::with_capacity(32);
         let mut unknown_calls: HashMap<u64, usize> = HashMap::with_capacity(32);
         
-        let mut last_ret_idx = 0usize;
+        let mut last_ret_idx = None;
         let mut last_loc_ip  = 0u64;
-        for instruction in instructions.iter().enumerate() {
-            match instruction.1.flow_control() {
+        for (i, instruction) in instructions.iter().enumerate() {
+            match instruction.flow_control() {
                 FlowControl::UnconditionalBranch |
                 FlowControl::ConditionalBranch => {
-                    let addr = instruction.1.near_branch64();
+                    let addr = instruction.near_branch64();
                     if addr >= self.addr && addr <= self.addr + self.len {
-                        if instruction.1.next_ip() <= addr {
+                        if instruction.next_ip() <= addr {
                             if !locs.contains_key(&addr) {
                                 last_loc_ip  = max(addr, last_loc_ip);
                                 locs.insert(addr, locs.len());
@@ -279,7 +279,7 @@ impl Method {
                     }
                 }
                 FlowControl::Call => {
-                    let addr = instruction.1.near_branch64();
+                    let addr = instruction.near_branch64();
                     if !meta.method_addr_table.contains_key(&addr) && !unknown_calls.contains_key(&addr) {
                         let len = unknown_calls.len();
                         unknown_calls.insert(addr, len);
@@ -287,8 +287,8 @@ impl Method {
                 }
                 FlowControl::Return |
                 FlowControl::Interrupt => {
-                    if last_loc_ip <= instruction.1.ip() {
-                        last_ret_idx = instruction.0;
+                    if last_loc_ip <= instruction.ip() {
+                        last_ret_idx = Some(i);
                         break;
                     }
                 }
@@ -296,7 +296,7 @@ impl Method {
             }
         }
         
-        (locs, loops, unknown_calls, last_ret_idx)
+        (locs, loops, unknown_calls, last_ret_idx.unwrap_or(max(instructions.len(),1)-1))
     }
     
     pub fn get_local_syms(&self, off: i64, meta: &IL2CppDumper) -> HashMap<String, u64> {
@@ -621,12 +621,16 @@ impl SymbolResolver for DecodeSymbolResolver {
 }
 
 fn format_label(number: usize, label_name: &mut String, function_name_len: usize, kind: &str) {
-    let mut tmp_idx = number + 1;
+    let mut tmp_idx = number;
     label_name.replace_range(function_name_len.., kind);
+    
+    label_name.insert(function_name_len + kind.len(), char::from((0x41+(tmp_idx%26)) as u8));
+    tmp_idx /= 26;
     while tmp_idx != 0 {
-        label_name.insert(function_name_len + kind.len(), char::from((0x40+(tmp_idx%26)) as u8));
+        label_name.insert(function_name_len + kind.len(), char::from((0x41+(tmp_idx%26)) as u8));
         tmp_idx /= 26;
     }
+    
     if label_name.starts_with('"') {
         label_name.push('"');
     }

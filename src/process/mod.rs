@@ -38,9 +38,9 @@ pub struct FusionProcess {
 }
 
 impl FusionProcess {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        let ret = Self::find_process_linux();
+        let ret = Self::find_process_linux(connect);
         #[cfg(target_os = "windows")]
         let ret = Self::find_process_windows();
         ret
@@ -62,7 +62,7 @@ impl FusionProcess {
     }
     
     #[cfg(target_os = "linux")]
-    fn find_process_linux() -> Result<Self, Box<dyn std::error::Error>> {
+    fn find_process_linux(connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
         use std::{fs::{canonicalize, read_to_string}, io::{IoSliceMut, Read}, os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, pipe};
 
         use object::{Object, ObjectSection};
@@ -179,6 +179,13 @@ impl FusionProcess {
             .join(&server_path_vec[0])
             .join("socket");
         
+        //let mut wineserver_socket = None;
+        //let mut request_pipe = None;
+        //let mut request_offset_table = None;
+        let (mut reply_pipe_r, reply_pipe_w) = pipe::pipe()?;
+        let (wait_pipe_r, wait_pipe_w)       = pipe::pipe()?;
+        //let mut fusion_handle = Some(u32::MAX);
+        
         let mut wineserver_socket = UnixStream::connect(wineserver_socket_path)?;
         
         let mut ancillary_buf = [0;256];
@@ -216,9 +223,6 @@ impl FusionProcess {
         }
         
         let request_offset_table = wine::get_request_offset_table_for_version(version);
-        
-        let (mut reply_pipe_r, reply_pipe_w) = pipe::pipe()?;
-        let (wait_pipe_r, wait_pipe_w)   = pipe::pipe()?;
         
         Self::send_fd_preinit(&mut wineserver_socket, reply_pipe_w.as_raw_fd());
         Self::send_fd_preinit(&mut wineserver_socket, wait_pipe_w.as_raw_fd());
@@ -284,6 +288,7 @@ impl FusionProcess {
         }
         
         println!("Fusion unix pid: {fusion_pid}");
+        println!("Fusion addr: {dll_offset:X}, Asm addr: {asm_offset:X}");
         
         if let Some(fusion_handle) = fusion_handle {
             Ok(Self {
