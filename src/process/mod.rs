@@ -62,7 +62,7 @@ impl FusionProcess {
     }
     
     #[cfg(target_os = "linux")]
-    fn find_process_linux(connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    fn find_process_linux(_connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
         use std::{fs::{canonicalize, read_to_string}, io::{IoSliceMut, Read}, os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, pipe};
 
         use object::{Object, ObjectSection};

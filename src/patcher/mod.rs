@@ -1127,7 +1127,7 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                         let fits_into_i8  =  i8::try_from(*value as i64).is_ok();
                         let fits_into_i32 = i32::try_from(*value as i64).is_ok();
                         let mut opcode = instruction.code();
-                        let mut imm = OpKind::Register;
+                        let mut imm;
                         opcode = if fits_into_i8 {
                             imm = match instruction.op1_kind() {
                                 OpKind::Immediate16 => OpKind::Immediate8to16,
