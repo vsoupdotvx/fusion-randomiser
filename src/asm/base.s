@@ -11,16 +11,24 @@ replace_card_unlock:
 	
 	movslq Card.unlockLevel(%rcx), %rax
 	
-	movl   $16,             %edx
+	movl   $16,  %edx
 	cmpl   $"Card::Unlock::EndoFlame", %eax
-	cmoveq %rdx,            %rax
+	cmoveq %rdx, %rax
 	
-	movl   $"Card::Unlock::Unlocked",  %edx
+	imull  $0x2493, level_idx(%rip), %edx #this immediate is 65536 / 7 (rounded up), used for modulo
+	shrl   $16,             %edx
+	imull  $-7,    %edx,    %edx
+	addl   level_idx(%rip), %edx
+	subl   $5,              %edx
+	cmpl   $-3,             %edx
+	sbbq   %rdx,            %rdx
+	orq    $"Card::Unlock::Unlocked", %rdx
 	cmpl   $"Card::Unlock::CattailGirl", %eax
 	cmoveq %rdx,            %rax
+	
 	movl   $"Card::Unlock::Advantrue45"+1, %edx
 	cmpl   $"Card::Unlock::Imitater", %eax
-	cmoveq %rdx,            %rax
+	cmoveq %rdx, %rax
 	
 	cmpq $"Card::Unlock::Unlocked", %rax
 	leaq plant_lut(%rip), %rdx
@@ -132,7 +140,7 @@ plant_type_flatten_menu: #for ease of use, this function saves all registers exc
 		leaq  menu_table(%rip), %rdx
 		leaq  menu_array(%rip),  %r8
 		leaq  menu_init_array(%rip), %r9
-		movl  $41,             %r10d
+		movl  $48,             %r10d
 		call  init_hash_table_u32_u32
 		movb  $1, menu_table_initialized(%rip)
 		popq  %r10
@@ -215,11 +223,18 @@ menu_init_array:
 	.long "MixData::PlantType::GloomShroom";   .long 39
 	.long "MixData::PlantType::CobCannon";     .long 40
 	
+	.long "MixData::PlantType::Imitater";      .long 41
+	.long "MixData::PlantType::Squalour";      .long 42
+	.long "MixData::PlantType::SwordStar";     .long 43
+	.long "MixData::PlantType::BigSunNut";     .long 44
+	.long "MixData::PlantType::CattailGirl";   .long 45
+	.long "MixData::PlantType::Wheat";         .long 46
+	.long "MixData::PlantType::BigWallNut";    .long 47
 
 menu_table:
 	.space 0x40 * 4
 menu_array:
-	.space 41 * 12
+	.space 48 * 12
 level_lut:
 	.space 50, 0x2
 plant_lut:

@@ -39,4 +39,4 @@ const0.5:
 const1over254:
     .float 0.00393700787402
 plant_cd_table:
-    .space 41
+    .space 48

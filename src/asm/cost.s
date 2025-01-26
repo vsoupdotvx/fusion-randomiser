@@ -47,4 +47,4 @@ const5.0:
 const0.2over254:
     .float 0.000787401574804
 plant_cost_table:
-    .space 41
+    .space 48
