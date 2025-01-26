@@ -1132,6 +1132,7 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                             imm = match instruction.op1_kind() {
                                 OpKind::Immediate16 => OpKind::Immediate8to16,
                                 OpKind::Immediate32 => OpKind::Immediate8to32,
+                                OpKind::Immediate32to64 |
                                 OpKind::Immediate64 => OpKind::Immediate8to64,
                                 _ => OpKind::Register
                             };

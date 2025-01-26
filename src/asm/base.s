@@ -2,16 +2,33 @@
 
 HASH_U32 = 0x1758F99D
 
-"InGameUIMgr::UnlockCard(&mut self, theSeedType: i32) -> bool+0xb1": #0x58 bytes
-	leaq   plant_lut(%rip), %rax #7
-	movzbl (%rax,%rbp),     %eax #4
-	cmpl   %eax,      0x20(%rsi) #3
-	hlt
-	jne    "InGameUIMgr::UnlockCard.locE" #6
-	xorl   %edx,            %edx #2
-	movq   %rsi,            %rcx #3
-	.nops  0x3F
-"ENDInGameUIMgr::UnlockCard(&mut self, theSeedType: i32) -> bool+0xb1":
+"Card::Start(&mut self)":
+	call replace_card_unlock
+"ENDCard::Start(&mut self)":
+
+replace_card_unlock:
+	movq   %rbx,      0x10(%rsp)
+	
+	movslq Card.unlockLevel(%rcx), %rax
+	
+	movl   $16,             %edx
+	cmpl   $"Card::Unlock::EndoFlame", %eax
+	cmoveq %rdx,            %rax
+	
+	movl   $"Card::Unlock::Unlocked",  %edx
+	cmpl   $"Card::Unlock::CattailGirl", %eax
+	cmoveq %rdx,            %rax
+	movl   $"Card::Unlock::Advantrue45"+1, %edx
+	cmpl   $"Card::Unlock::Imitater", %eax
+	cmoveq %rdx,            %rax
+	
+	cmpq $"Card::Unlock::Unlocked", %rax
+	leaq plant_lut(%rip), %rdx
+	jle  replace_card_unlock.locA
+		movzbl -1(%rdx,%rax), %eax
+	replace_card_unlock.locA:
+	movl %eax, Card.unlockLevel(%rcx)
+	ret
 
 "Advanture_Btn::OnMouseUp(&mut self)+0x4e":
 	call adventure_level_enter
@@ -197,6 +214,7 @@ menu_init_array:
 	.long "MixData::PlantType::CattailPlant";  .long 38
 	.long "MixData::PlantType::GloomShroom";   .long 39
 	.long "MixData::PlantType::CobCannon";     .long 40
+	
 
 menu_table:
 	.space 0x40 * 4
@@ -205,7 +223,7 @@ menu_array:
 level_lut:
 	.space 50, 0x2
 plant_lut:
-	.space 50
+	.space 50, 0x0
 menu_table_initialized:
 	.byte 0
 
