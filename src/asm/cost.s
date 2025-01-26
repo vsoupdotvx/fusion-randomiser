@@ -39,7 +39,7 @@ cmp_and_store_cost:
 
 .section .data
 const0.2:
-    .float 0.2
+    .float 0.20001 #fixes some rounding issues I was having
 const0.5:
     .float 0.5
 const5.0:
