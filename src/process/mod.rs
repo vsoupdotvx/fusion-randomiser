@@ -1,6 +1,48 @@
-use std::{fs::{read_dir, File, OpenOptions}, path::{Path, PathBuf}, pipe::{PipeReader, PipeWriter}};
+use std::{fs::File, io::Read, path::{Path, PathBuf}};
 #[cfg(target_os = "linux")]
-use std::os::unix::net::UnixStream;
+use std::{fs::{read_dir, OpenOptions, canonicalize, read_to_string}, io::IoSliceMut, os::unix::net::UnixStream, pipe::{PipeReader, PipeWriter}};
+use object::{Object, ObjectSection};
+#[cfg(target_os = "windows")]
+use windows::{
+    Wdk::System::SystemInformation::{
+        NtQuerySystemInformation,
+        SystemProcessInformation,
+    },
+    Win32::{
+        Foundation::{
+            HANDLE,
+            HMODULE,
+        },
+        System::{
+            Diagnostics::Debug::WriteProcessMemory,
+            Memory::{
+                MEMORY_BASIC_INFORMATION,
+                MEM_COMMIT,
+                MEM_FREE,
+                MEM_RESERVE,
+                PAGE_PROTECTION_FLAGS,
+                VirtualAllocEx,
+                VirtualQueryEx,
+            },
+            ProcessStatus::{
+                EnumProcessModules,
+                GetModuleFileNameExW,
+                GetModuleInformation,
+                MODULEINFO,
+            },
+            Threading::{
+                OpenProcess,
+                PROCESS_QUERY_INFORMATION,
+                PROCESS_VM_OPERATION,
+            },
+            WindowsProgramming::SYSTEM_PROCESS_INFORMATION,
+        },
+    },
+};
+#[cfg(target_os = "windows")]
+use windows_core::Free;
+#[cfg(target_os = "windows")]
+use core::{ffi::c_void, ptr};
 use super::util::CommonError;
 #[cfg(target_os = "linux")]
 pub mod wine;
@@ -14,6 +56,9 @@ pub struct FusionProcess {
     pub files_dir: PathBuf,
     pub dll_offset: u64,
     pub asm_offset: u64,
+    #[cfg(target_os = "windows")]
+    fusion_handle: HANDLE,
+    #[cfg(target_os = "linux")]
     fusion_handle: u32,
     #[cfg(target_os = "linux")]
     fusion_pid: i32,
@@ -38,36 +83,212 @@ pub struct FusionProcess {
 }
 
 impl FusionProcess {
-    pub fn new(connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(_connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        let ret = Self::find_process_linux(connect);
+        let ret = Self::find_process_linux(_connect);
         #[cfg(target_os = "windows")]
         let ret = Self::find_process_windows();
         ret
     }
     
     pub fn allocate_memory(&mut self, addr: u64, size: u64, prot: u32) {
-        #[cfg(target_os = "linux")]
-        self.allocate_memory_wine(addr, size, prot);
+        if size > 0 {
+            #[cfg(target_os = "linux")]
+            self.allocate_memory_wine(addr, size, prot);
+            #[cfg(target_os = "windows")]
+            self.allocate_memory_windows(addr, size, prot);
+        }
     }
     
     pub fn write_memory(&mut self, addr: u64, data: &[u8]) {
-        #[cfg(target_os = "linux")]
-        self.write_memory_linux(addr, data);
+        if data.len() > 0 {
+            #[cfg(target_os = "linux")]
+            self.write_memory_linux(addr, data);
+            #[cfg(target_os = "windows")]
+            self.write_memory_windows(addr, data);
+        }
     }
     
     #[cfg(target_os = "windows")]
     fn find_process_windows() -> Result<Self, Box<dyn std::error::Error>> {
+        use std::ptr::slice_from_raw_parts;
+        
+        let mut buf_size = 0u32;
+        let mut buf: Vec<u8>;
+        
+        loop { //loop to prevent race conditions
+            buf = vec![0; buf_size as usize];
+            unsafe {
+                if NtQuerySystemInformation(
+                    SystemProcessInformation,
+                    if buf.len() == 0 {
+                        ptr::null_mut()
+                    } else {
+                        &mut buf[0] as *mut u8 as *mut c_void
+                    },
+                    buf_size,
+                    &mut buf_size as *mut u32,
+                ).is_ok() {break;}
+            }
+        }
+        
+        let mut pointer = ptr::addr_of!(buf[0]);
+        let (fusion_pid, files_dir) = loop {
+            let info = unsafe { &*(pointer as *const SYSTEM_PROCESS_INFORMATION) };
+            
+            let name = String::from_utf16_lossy(unsafe { &*slice_from_raw_parts(info.ImageName.Buffer.0, info.ImageName.Length as usize) });
+            
+            if name.ends_with("PlantsVsZombiesRH.exe") {
+                break (info.UniqueProcessId, Path::new(&name).parent().unwrap().to_path_buf())
+            }
+            
+            if info.NextEntryOffset == 0 {
+                return Err(Box::new(CommonError::critical("Plants Vs Zombies Fusion not currently running or not found")));
+            }
+            pointer = pointer.wrapping_add(info.NextEntryOffset as usize);
+        };
+        
+        let fusion_handle = match unsafe {
+            OpenProcess(
+                PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION,
+                false,
+                fusion_pid.0 as usize as u32,
+            )
+        } {
+            Ok(handle) => handle,
+            Err(err) => return Err(Box::new(CommonError::critical(&format!("Error opening process: {err}")))),
+        };
+        
+        buf_size = 0;
+        let mut module_handles: Vec<HMODULE>;
+        
+        loop { //loop to prevent race conditions
+            module_handles = vec![HMODULE::default(); buf_size as usize / size_of::<HMODULE>()];
+            unsafe {
+                if EnumProcessModules(
+                    fusion_handle,
+                    if module_handles.len() == 0 {
+                        ptr::null_mut()
+                    } else {
+                        &mut module_handles[0] as *mut HMODULE
+                    },
+                    buf_size,
+                    &mut buf_size as *mut u32,
+                ).is_ok() {break;}
+            }
+        }
+        
+        let mut name_buf = [0u16; 2048];
+        let mut game_assembly_dll_path = files_dir.clone();
+        game_assembly_dll_path.push("GameAssembly.dll");
+        let game_assembly_dll_path = game_assembly_dll_path.to_string_lossy().to_string();
+        let mut game_assembly_module_info = None;
+        
+        for mut handle in module_handles {
+            let name_len = unsafe { GetModuleFileNameExW(
+                Some(fusion_handle),
+                Some(handle),
+                &mut name_buf,
+            ) };
+            if name_len > 0 {
+                let name = String::from_utf16_lossy(&name_buf[0 .. name_len as usize]);
+                if name == game_assembly_dll_path {
+                    let mut module_info = MODULEINFO::default();
+                    unsafe { GetModuleInformation(
+                        fusion_handle,
+                        handle,
+                        &mut module_info as *mut MODULEINFO,
+                        size_of::<MODULEINFO>() as u32,
+                    ) }.expect("Failed to get module information");
+                    
+                    game_assembly_module_info = Some(module_info);
+                }
+            }
+            unsafe { handle.free() };
+        }
+        
+        let module_info = match game_assembly_module_info {
+            Some(info) => info,
+            None => return Err(Box::new(CommonError::critical("Could not find module GameAssembly.dll"))),
+        };
+        
+        let dll_offset = module_info.lpBaseOfDll as usize as u64;
+        
+        let mut dll_file = File::open(files_dir.clone().join("GameAssembly.dll"))?;
+        let mut dll_data = vec![0; dll_file.metadata()?.len() as usize];
+        dll_file.read(&mut dll_data)?;
+        let dll_data = dll_data.into_boxed_slice();
+        let dll_obj = object::File::parse(&*dll_data)?;
+        let dll_text_end = dll_obj.section_by_name(".rdata").unwrap().address() - dll_obj.relative_address_base() + dll_offset;
+        
+        let mut map_ranges: Vec<(u64,u64)> = Vec::new();
+        
+        let mut addr = 0x100000usize;
+        loop {
+            let mut lp_buffer = MEMORY_BASIC_INFORMATION::default();
+            let retval = unsafe { VirtualQueryEx(
+                fusion_handle,
+                Some(addr as *const c_void),
+                &mut lp_buffer as *mut MEMORY_BASIC_INFORMATION,
+                size_of::<MEMORY_BASIC_INFORMATION>(),
+            ) };
+            if retval == 0 {
+                break;
+            }
+            if lp_buffer.State != MEM_FREE {
+                map_ranges.push((lp_buffer.AllocationBase as usize as u64, lp_buffer.AllocationBase as usize as u64 + lp_buffer.RegionSize as u64));
+            }
+            addr = lp_buffer.AllocationBase as usize + lp_buffer.RegionSize;
+        }
+        
+        let start_idx = map_ranges.partition_point(|(_s, e)| {*e < dll_text_end - i32::MAX as u64});
+        let mut asm_offset = (dll_text_end - i32::MAX as u64 - 1 + 0xFFFFF) & !0xFFFFF;
+        
+        for (original_start, original_end) in map_ranges.iter().skip(start_idx).take_while(|(_s, e)| {*e + 0xFFFFF <= dll_offset + i32::MAX as u64}) {
+            let start = original_start & !0xFFFFF;
+            let end = (original_end + 0xFFFFF) & !0xFFFFF;
+            if (start..end).contains(&(asm_offset + 0xFFFFF)) || (start..end).contains(&asm_offset) {
+                asm_offset = end;
+            } else {
+                break;
+            }
+        }
+        
         Err(Box::new(CommonError::critical("Windows cannot currently find Plants Vs Zombies Fusion")))
+    }
+    
+    #[cfg(target_os = "windows")]
+    pub fn write_memory_windows(&mut self, addr: u64, data: &[u8]) {
+        unsafe {
+            WriteProcessMemory(
+                self.fusion_handle,
+                addr as *const c_void,
+                &data[0] as *const u8 as *const c_void,
+                data.len(),
+                None,
+            ).unwrap();
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    pub fn allocate_memory_windows(&mut self, addr: u64, size: u64, prot: u32) {
+        unsafe {
+            VirtualAllocEx(
+                self.fusion_handle,
+                Some(addr as *const c_void),
+                size as usize,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_PROTECTION_FLAGS(prot),
+            );
+        }
     }
     
     #[cfg(target_os = "linux")]
     fn find_process_linux(_connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        use std::{fs::{canonicalize, read_to_string}, io::{IoSliceMut, Read}, os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, pipe};
-
-        use object::{Object, ObjectSection};
+        use std::{os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, pipe};
+        
         use smallvec::SmallVec;
-
+        
         let mut fusion_pid = 0i32;
         
         for f in read_dir("/proc/")? {
