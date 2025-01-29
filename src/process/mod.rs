@@ -254,7 +254,12 @@ impl FusionProcess {
             }
         }
         
-        Err(Box::new(CommonError::critical("Windows cannot currently find Plants Vs Zombies Fusion")))
+        Ok(Self {
+            fusion_handle,
+            files_dir,
+            dll_offset,
+            asm_offset,
+        })
     }
     
     #[cfg(target_os = "windows")]
