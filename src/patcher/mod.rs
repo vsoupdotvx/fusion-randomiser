@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write, num::NonZeroU64, ops::Range};
 
-use iced_x86::{Code, Decoder, DecoderOptions, Encoder, Instruction, Mnemonic, OpKind};
+use iced_x86::{Code, Decoder, DecoderOptions, Encoder, Formatter, GasFormatter, Instruction, Mnemonic, OpKind};
 use object::{File, Object, ObjectSection, ObjectSymbol, Relocation, RelocationKind, RelocationTarget, Section, SectionKind, Symbol, SymbolKind};
 use smallvec::SmallVec;
 
@@ -500,7 +500,15 @@ impl Patch {
                     _ => {
                         let mut instruction = original_instruction.clone();
                         fill_in_imms_phase_1(&mut instruction, &patch.imm_vec, text_section_off + current_offset as u64, fusion.dll_offset);
-                        encoder.encode(&instruction, text_section_off + current_offset as u64).expect("Phase 1 encoding error") as u32
+                        match encoder.encode(&instruction, text_section_off + current_offset as u64) {
+                            Ok(sz) => sz as u32,
+                            Err(err) => {
+                                let mut instr_string = String::new();
+                                let mut formatter = GasFormatter::with_options(None, None);
+                                formatter.format(&instruction, &mut instr_string);
+                                panic!("Phase 1 encoding error: {err}\n{}", instr_string);
+                            }
+                        }
                     }
                 };
                 instruction_offsets_1.push(current_offset);
@@ -660,6 +668,14 @@ impl Patch {
                 all_data.write(&vec![0; pad_len]).unwrap();
                 all_data.write(data).unwrap();
             }
+        }
+        
+        if false {
+            println!("DATA:");
+            for byte in &all_data {
+                print!("{:02X} ", byte);
+            }
+            println!("")
         }
         
         fusion.write_memory(fusion.asm_offset, &all_data);
@@ -960,7 +976,10 @@ fn fill_in_imms_phase_2(
                                     let (_, mem_off) = get_instruction_imm_and_memory_offsets_2(instruction);
                                     instruction.set_memory_displacement64((*addr as i64 + mem_off as i64 + addend) as u64); //hopefully instruction hasn't been shortened...
                                 } else {
-                                    panic!("Unresolved memory access is not ip relative!");
+                                    let mut instr_string = String::new();
+                                    let mut formatter = GasFormatter::with_options(None, None);
+                                    formatter.format(instruction, &mut instr_string);
+                                    panic!("Unresolved memory access is not ip relative!\n{instr_string}");
                                 }
                             }
                             _ => {}
@@ -1244,7 +1263,7 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
                             Code::Imul_r16_rm16_imm8 => {instruction.set_code(Code::Imul_r16_rm16_imm16); instruction.set_op2_kind(OpKind::Immediate16)},
                             Code::Imul_r32_rm32_imm8 => {instruction.set_code(Code::Imul_r32_rm32_imm32); instruction.set_op2_kind(OpKind::Immediate32)},
                             Code::Imul_r64_rm64_imm8 => {instruction.set_code(Code::Imul_r64_rm64_imm32); instruction.set_op2_kind(OpKind::Immediate32to64)},
-                            Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
+                            //Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
                             Code::Or_rm16_imm8 => {instruction.set_code(Code::Or_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
                             Code::Or_rm32_imm8 => {instruction.set_code(Code::Or_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
                             Code::Or_rm64_imm8 => {instruction.set_code(Code::Or_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
@@ -1286,7 +1305,7 @@ fn change_imm_size_large(instruction: &mut Instruction) {
         Code::Imul_r16_rm16_imm8 => {instruction.set_code(Code::Imul_r16_rm16_imm16); instruction.set_op2_kind(OpKind::Immediate16)},
         Code::Imul_r32_rm32_imm8 => {instruction.set_code(Code::Imul_r32_rm32_imm32); instruction.set_op2_kind(OpKind::Immediate32)},
         Code::Imul_r64_rm64_imm8 => {instruction.set_code(Code::Imul_r64_rm64_imm32); instruction.set_op2_kind(OpKind::Immediate32to64)},
-        Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
+        //Code::Mov_r32_imm32 => {instruction.set_code(Code::Mov_r64_imm64); instruction.set_op1_kind(OpKind::Immediate64)},
         Code::Or_rm16_imm8 => {instruction.set_code(Code::Or_rm16_imm16); instruction.set_op1_kind(OpKind::Immediate16)},
         Code::Or_rm32_imm8 => {instruction.set_code(Code::Or_rm32_imm32); instruction.set_op1_kind(OpKind::Immediate32)},
         Code::Or_rm64_imm8 => {instruction.set_code(Code::Or_rm64_imm32); instruction.set_op1_kind(OpKind::Immediate32to64)},
