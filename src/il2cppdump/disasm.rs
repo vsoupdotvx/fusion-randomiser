@@ -203,12 +203,15 @@ impl Method {
                     let spaces       = " ".repeat(((operand_len_vec[instruction.0] as u32 + instruction.1.op_count() - 2) / (instruction.1.op_count() - 1)) as usize);
                     let mut counter  = instruction.1.op_count() as usize - (spaces.len() * (instruction.1.op_count() as usize - 1) - operand_len_vec[instruction.0] as usize);
                     let mut inquotes = false;
+                    let mut inparens = false;
                     let mut str_pos  = out_string.chars().count();
                     for c in out_string.clone().chars().rev() {
                         match c {
                             '"' => {inquotes = !inquotes}
+                            ')' => {inparens = true}
+                            '(' => {inparens = false}
                             ',' => {
-                                if !inquotes {
+                                if !(inquotes || inparens) {
                                     if counter > 0 {
                                         out_string.insert_str(str_pos, &spaces);
                                         counter -= 1;
