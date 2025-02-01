@@ -14,7 +14,10 @@ use windows::{
             HMODULE,
         },
         System::{
-            Diagnostics::Debug::WriteProcessMemory,
+            Diagnostics::Debug::{
+                ReadProcessMemory,
+                WriteProcessMemory,
+            },
             Memory::{
                 MEMORY_BASIC_INFORMATION,
                 MEM_COMMIT,
@@ -106,6 +109,15 @@ impl FusionProcess {
             self.write_memory_linux(addr, data);
             #[cfg(target_os = "windows")]
             self.write_memory_windows(addr, data);
+        }
+    }
+    
+    pub fn read_memory(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+        if len > 0 {
+            #[cfg(target_os = "linux")]
+            self.read_memory_linux(addr, len, data);
+            #[cfg(target_os = "windows")]
+            self.read_memory_windows(addr, len, data);
         }
     }
     
@@ -270,6 +282,20 @@ impl FusionProcess {
                 addr as *const c_void,
                 &data[0] as *const u8 as *const c_void,
                 data.len(),
+                None,
+            ).unwrap();
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    pub fn read_memory_windows(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+        data.resize(len, 0);
+        unsafe {
+            ReadProcessMemory(
+                self.fusion_handle,
+                addr as *const c_void,
+                &mut data[0] as *mut u8 as *mut c_void,
+                len,
                 None,
             ).unwrap();
         }
@@ -542,5 +568,12 @@ impl FusionProcess {
     pub fn write_memory_linux(&mut self, addr: u64, data: &[u8]) {
         use std::os::unix::fs::FileExt;
         self.mem.write_all_at(data, addr).unwrap();
+    }
+    
+    #[cfg(target_os = "linux")]
+    pub fn read_memory_linux(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+        use std::os::unix::fs::FileExt;
+        data.resize(len, 0);
+        self.mem.read_at(&mut data[0 .. len], addr).unwrap();
     }
 }
