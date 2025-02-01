@@ -914,7 +914,10 @@ impl IL2CppStruct {
     }
     
     fn decode(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32) {
+        let mut table: HashMap<String, u64> = HashMap::new();
+        self.get_enum_stuff(meta, &mut table);
         format_to!(out_str, "struct {} {{\n", self.get_name(meta));
+        let my_name = self.get_name(meta);
         //let mut field_offsets: Vec<(String, u64)> = Vec::with_capacity(self.field_count as usize);
         
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
@@ -930,7 +933,11 @@ impl IL2CppStruct {
                     off = off.wrapping_sub(16);
                 }
                 
-                format_to!(out_str, "\t{}: {}, //0x{off:X}\n", meta.get_string(field.name_off), typ.name(meta).0);
+                if let Some(val) = table.get(&format!("{my_name}::{}", meta.get_string(field.name_off))) {
+                    format_to!(out_str, "\t{}: {} = {val}, //0x{off:X}\n", meta.get_string(field.name_off), typ.name(meta).0);
+                } else {
+                    format_to!(out_str, "\t{}: {}, //0x{off:X}\n", meta.get_string(field.name_off), typ.name(meta).0);
+                }
                 
                 //if typ.attrs & 0x50 == 0 {
                 //    let name = format!("{prefix}.{}", );
