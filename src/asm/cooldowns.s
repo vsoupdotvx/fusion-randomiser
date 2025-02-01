@@ -1,13 +1,13 @@
 .section .text
 
-"CardUI::Awake(&mut self)+0xC7":
+"CardUI::Awake(&mut self)+0xDC":
     call store_cooldown
-"ENDCardUI::Awake(&mut self)+0xC7":
+"ENDCardUI::Awake(&mut self)+0xDC":
 
 store_cooldown:
-    pushfq
     pushq  %rax
     
+    movss CardUI.fullCD(%rbx), %xmm1
     movl CardUI.theSeedType(%rbx), %ecx
     cmpl $1160, %ecx
     ja   store_cooldown.locA
@@ -23,12 +23,12 @@ store_cooldown:
             jc       store_cooldown.locB
                 mulss const0.5(%rip), %xmm0
             store_cooldown.locB:
-            mulss %xmm0, %xmm2
+            mulss %xmm0, %xmm1
     store_cooldown.locA:
     
-    movss %xmm2, CardUI.fullCD(%rbx)
+    movss %xmm1, CardUI.fullCD(%rbx)
+    movss CardUI.CD(%rbx), %xmm1
     popq  %rax
-    popfq
     ret
 
 .section .data

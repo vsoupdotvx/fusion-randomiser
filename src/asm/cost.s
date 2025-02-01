@@ -1,14 +1,12 @@
 .section .text
 
-"CardUI::Awake(&mut self)+0xBC":
+"CardUI::Awake(&mut self)+0xE1":
     call cmp_and_store_cost
     nop
-"ENDCardUI::Awake(&mut self)+0xBC":
+"ENDCardUI::Awake(&mut self)+0xE1":
 
 cmp_and_store_cost:
-    pushq %rdx
-    
-    movl %eax, %edx
+    movl CardUI.theSeedCost(%rbx), %edx
     movl CardUI.theSeedType(%rbx), %ecx
     cmpl $1160, %ecx
     ja   cmp_and_store_cost.locA
@@ -31,10 +29,8 @@ cmp_and_store_cost:
     cmp_and_store_cost.locA:
     
     movl    %edx, CardUI.theSeedCost(%rbx)
+    xorps   %xmm0, %xmm0
     ucomiss %xmm0, %xmm1
-    
-    movl %edx, %eax
-    popq %rdx
     ret
 
 .section .data

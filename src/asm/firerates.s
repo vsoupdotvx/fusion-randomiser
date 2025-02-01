@@ -22,21 +22,21 @@
 	.endif
 .endm
 
-"CardUI::Awake(&mut self)+0x230":
+"CardUI::Awake(&mut self)+0x24F":
     call card_create_label
-"ENDCardUI::Awake(&mut self)+0x230":
+"ENDCardUI::Awake(&mut self)+0x24F":
 
-"CardUI::Update(&mut self)+0xD9":
+"CardUI::Update(&mut self)+0x108":
     call card_create_label
-"ENDCardUI::Update(&mut self)+0xD9":
+"ENDCardUI::Update(&mut self)+0x108":
 
-"Plant::PlantShootUpdate(&mut self)+0x70":
+"Plant::PlantShootUpdate(&mut self)+0x5A":
     call plant_get_firerate
-"ENDPlant::PlantShootUpdate(&mut self)+0x70":
+"ENDPlant::PlantShootUpdate(&mut self)+0x5A":
 
 plant_get_firerate:
     movl Plant.thePlantType(%rbx), %edx
-    cmpl $1160, %edx #MAX_PLANT
+    cmpl $1178, %edx #MAX_PLANT
     ja   plant_get_firerate.locA
         call     plant_type_flatten
         
@@ -208,4 +208,5 @@ indicator_lut:
 const1over254:
     .float 0.00393700787402
 plant_firerate_table:
-    .space 33 + 12 + 25 + 161, 0x00
+    .space 35 + 17 + 1 + 31 + 179, 0x00
+plant_firerate_table_end:
