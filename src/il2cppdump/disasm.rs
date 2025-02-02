@@ -276,7 +276,7 @@ impl Method {
                                 last_loc_ip  = max(addr, last_loc_ip);
                                 locs.insert(addr, locs.len());
                             }
-                        } else if !locs.contains_key(&addr) {
+                        } else if !loops.contains_key(&addr) {
                             loops.insert(addr, loops.len());
                         }
                     }
