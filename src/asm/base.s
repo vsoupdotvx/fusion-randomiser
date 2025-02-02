@@ -19,6 +19,11 @@ HASH_U32 = 0x1758F99D
 	call set_level_trophy
 "ENDPrizeMgr::Click(&mut self)+0x47E":
 
+"UIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x332":
+	call rerandomise
+	nop
+"ENDUIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x332":
+
 replace_card_unlock:
 	movl  %ecx, %edx
 	call  plant_type_flatten_menu
@@ -189,7 +194,15 @@ wait_on_rust:
 	jne wait_on_rust.locA
 	ret
 
+rerandomise:
+	movl %ebp, GameAPP.theBoardType(%rcx)
+	movq %rcx, game_app_ptr(%rip)
+	call wait_on_rust
+	ret
+
 .section .data
+game_app_ptr:
+	.quad 0
 level_idx:
 	.long 1
 menu_init_array:
