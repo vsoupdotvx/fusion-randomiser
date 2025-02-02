@@ -103,22 +103,24 @@ impl FusionProcess {
         }
     }
     
-    pub fn write_memory(&mut self, addr: u64, data: &[u8]) {
+    pub fn write_memory(&mut self, addr: u64, data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         if data.len() > 0 {
             #[cfg(target_os = "linux")]
-            self.write_memory_linux(addr, data);
+            self.write_memory_linux(addr, data)?;
             #[cfg(target_os = "windows")]
-            self.write_memory_windows(addr, data);
+            self.write_memory_windows(addr, data)?;
         }
+        Ok(())
     }
     
-    pub fn read_memory(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+    pub fn read_memory(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
         if len > 0 {
             #[cfg(target_os = "linux")]
-            self.read_memory_linux(addr, len, data);
+            self.read_memory_linux(addr, len, data)?;
             #[cfg(target_os = "windows")]
-            self.read_memory_windows(addr, len, data);
+            self.read_memory_windows(addr, len, data)?;
         }
+        Ok(())
     }
     
     #[cfg(target_os = "windows")]
@@ -275,20 +277,27 @@ impl FusionProcess {
     }
     
     #[cfg(target_os = "windows")]
-    pub fn write_memory_windows(&mut self, addr: u64, data: &[u8]) {
+    pub fn write_memory_windows(&mut self, addr: u64, data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut written = 0;
         unsafe {
             WriteProcessMemory(
                 self.fusion_handle,
                 addr as *const c_void,
                 &data[0] as *const u8 as *const c_void,
                 data.len(),
-                None,
-            ).unwrap();
+                Some(&mut written as *mut usize),
+            )?;
+        }
+        if written != data.len() {
+            Err(Box::new(CommonError::inconvenience("Wrong number of bytes were written")))
+        } else {
+            Ok(())
         }
     }
     
     #[cfg(target_os = "windows")]
-    pub fn read_memory_windows(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+    pub fn read_memory_windows(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+        let mut read = 0;
         data.resize(len, 0);
         unsafe {
             ReadProcessMemory(
@@ -296,8 +305,13 @@ impl FusionProcess {
                 addr as *const c_void,
                 &mut data[0] as *mut u8 as *mut c_void,
                 len,
-                None,
-            ).unwrap();
+                Some(&mut read as *mut usize),
+            )?;
+        }
+        if read != len {
+            Err(Box::new(CommonError::inconvenience("Wrong number of bytes were read")))
+        } else {
+            Ok(())
         }
     }
     
@@ -565,15 +579,25 @@ impl FusionProcess {
     }
     
     #[cfg(target_os = "linux")]
-    pub fn write_memory_linux(&mut self, addr: u64, data: &[u8]) {
+    pub fn write_memory_linux(&mut self, addr: u64, data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::FileExt;
-        self.mem.write_all_at(data, addr).unwrap();
+        let written = self.mem.write_at(data, addr)?;
+        if written != data.len() {
+            Err(Box::new(CommonError::inconvenience("Wrong number of bytes were written")))
+        } else {
+            Ok(())
+        }
     }
     
     #[cfg(target_os = "linux")]
-    pub fn read_memory_linux(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) {
+    pub fn read_memory_linux(&mut self, addr: u64, len: usize, data: &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::FileExt;
         data.resize(len, 0);
-        self.mem.read_at(&mut data[0 .. len], addr).unwrap();
+        let read = self.mem.read_at(&mut data[0 .. len], addr)?;
+        if read != len {
+            Err(Box::new(CommonError::inconvenience("Wrong number of bytes were read")))
+        } else {
+            Ok(())
+        }
     }
 }

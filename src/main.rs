@@ -5,6 +5,7 @@ use std::{env, thread::sleep, time::Duration};
 use il2cppdump::IL2CppDumper;
 use patcher::Patch;
 use process::FusionProcess;
+use util::CommonError;
 
 pub mod il2cppdump;
 pub mod patcher;
@@ -33,9 +34,20 @@ fn main() {
     let mut mem_read_vec = Vec::new();
     loop {
         sleep(Duration::from_millis(10));
-        fusion.read_memory(wait_addr, 1, &mut mem_read_vec);
+        match fusion.read_memory(wait_addr, 1, &mut mem_read_vec) {
+            Err(err) => {
+                match err.downcast::<CommonError>() {
+                    Err(err) => panic!("Failed to read memory: {err}"),
+                    _ => break, //if a CommonError is returned, it means fusion closed
+                }
+            }
+            _ => {}
+        }
         if mem_read_vec[0] == 0 {
             continue;
         }
+        
+        fusion.write_memory(wait_addr, &[0]).unwrap();
     }
+    println!("Closed");
 }

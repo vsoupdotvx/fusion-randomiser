@@ -625,7 +625,7 @@ impl Patch {
         
         let code = encoder.take_buffer();
         
-        fusion.write_memory(fusion.asm_offset + data_section_size, &code);
+        fusion.write_memory(fusion.asm_offset + data_section_size, &code).unwrap();
         
         let mut all_data: Vec<u8> = Vec::with_capacity(text_section_size as usize);
         
@@ -678,7 +678,7 @@ impl Patch {
             println!("")
         }
         
-        fusion.write_memory(fusion.asm_offset, &all_data);
+        fusion.write_memory(fusion.asm_offset, &all_data).unwrap();
         
         for (patch_idx, patch) in patches.iter_mut().enumerate() {
             let (_data_section_off, text_section_off) = &section_offs[patch_idx];
@@ -822,7 +822,7 @@ impl Patch {
                 }
                 
                 let code = encoder.take_buffer();
-                fusion.write_memory(injection.off, &code);
+                fusion.write_memory(injection.off, &code).unwrap();
             }
         }
         
