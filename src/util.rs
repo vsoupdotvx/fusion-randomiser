@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::{Debug, Display}};
+use std::{error::Error, fmt::{Debug, Display}, hash::{DefaultHasher, Hash, Hasher}};
 
 enum ErrorSeverity {
     Critical,
@@ -52,4 +52,10 @@ impl Debug for CommonError {
 }
 
 impl Error for CommonError {
+}
+
+pub fn hash_str(input: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
 }

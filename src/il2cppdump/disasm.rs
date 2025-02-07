@@ -86,7 +86,7 @@ impl Method {
                             }
                             if indent {
                                 for i in indent_vec[instruction.0+1..end_idx].iter_mut() {
-                                    *i += 1;
+                                    *i = i.saturating_add(1);
                                 }
                             }
                         } else {

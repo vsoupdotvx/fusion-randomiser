@@ -675,12 +675,12 @@ impl IL2CppStruct {
                 );
                 if strukt.flags & 0x2000 != 0 && recursion < 5 {
                 //if recursion < 5 {
-                    format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off - field_off as u64, recursion + 1, meta))
+                    format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off.wrapping_sub(field_off as u64), recursion + 1, meta))
                 } else if field_off != off as u32 {
-                    format_to!(ret, "+0x{:X}", off as u32 - field_off)
+                    format_to!(ret, "+0x{:X}", (off as u32).wrapping_sub(field_off))
                 }
             } else if field_off != off as u32 {
-                format_to!(ret, "+0x{:X}", off as u32 - field_off)
+                format_to!(ret, "+0x{:X}", (off as u32).wrapping_sub(field_off))
             }
             
             ret
@@ -1113,7 +1113,6 @@ impl IL2CppDumper {
         //    println!("0x{code_gen_module_off:x} {name}: {function_cnt}");
         //}
         //println!("{acc}");
-        println!("0x{:X}", pe.map_v2p(0x181BF5E98).unwrap());
         
         let mut il2cpp = Self {
             string_literals:           OffSiz::from_bytes(&metadata[0x008..0x010]),
@@ -1181,20 +1180,20 @@ impl IL2CppDumper {
         il2cpp.populate_types();
         il2cpp.populate_methods();
         
-        let mut out_str = String::new();
-        il2cpp.methods_array[*il2cpp.methods_table.get("InGameUIMgr::Awake(&mut self)").unwrap() as usize].decode(&il2cpp, &mut out_str);
+        //let mut out_str = String::new();
+        //il2cpp.methods_array[*il2cpp.methods_table.get("InGameUIMgr::Awake(&mut self)").unwrap() as usize].decode(&il2cpp, &mut out_str);
         
         let il2cpp_arc = Arc::new(il2cpp);
         
-        match il2cpp_arc.output_disasm(concat!(env!("CARGO_MANIFEST_DIR"), "/out.s")) {
-            Ok(())  => println!("Successfully output disasm"),
-            Err(()) => println!("Failed to output disasm"),
-        }
+        //match il2cpp_arc.output_disasm(concat!(env!("CARGO_MANIFEST_DIR"), "/out.s")) {
+        //    Ok(())  => println!("Successfully output disasm"),
+        //    Err(()) => println!("Failed to output disasm"),
+        //}
         
-        match il2cpp_arc.output_structs(concat!(env!("CARGO_MANIFEST_DIR"), "/out_structs.rs")) {
-            Ok(())  => println!("Successfully output structs"),
-            Err(()) => println!("Failed to output structs"),
-        }
+        //match il2cpp_arc.output_structs(concat!(env!("CARGO_MANIFEST_DIR"), "/out_structs.rs")) {
+        //    Ok(())  => println!("Successfully output structs"),
+        //    Err(()) => println!("Failed to output structs"),
+        //}
         
         Ok(Arc::into_inner(il2cpp_arc).unwrap())
     }

@@ -301,7 +301,7 @@ impl Patch {
                             Immediate::InstructionOffset(off) => {
                                 let orig_off = *off;
                                 if *off > start_idx {
-                                    *off -= injection_size;
+                                    *off = off.wrapping_sub(injection_size);
                                 }
                                 if orig_off == end_idx {
                                     if let Some(instruction_off) = rev_imm_lookup.get(imm_idx) {

@@ -24,6 +24,15 @@ HASH_U32 = 0x1758F99D
 	nop
 "ENDUIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x332":
 
+"MixData::InitMixData()+0x77":
+	call store_mix_data_ptr
+	.nops 2
+"ENDMixData::InitMixData()+0x77":
+
+"PrizeMgr::GoBack(&mut self)+0x142":
+	call adventure_level_enter_2
+"ENDPrizeMgr::GoBack(&mut self)+0x142":
+
 replace_card_unlock:
 	movl  %ecx, %edx
 	call  plant_type_flatten_menu
@@ -36,6 +45,7 @@ replace_card_unlock:
 	je    replace_card_unlock.locB
 	leaq  plant_lut(%rip), %rcx
 	movl  level_idx(%rip), %edx
+	incl  %edx
 	cmpb  %dl,      (%rcx,%rax)
 	setna %al
 	ret
@@ -52,13 +62,14 @@ replace_card_unlock:
 set_level_trophy:
 	cmpl $"LevelType::Advanture", GameAPP.theBoardType(%rax)
 	jne  set_level_trophy.locA
-		movl level_idx(%rip), %edx
 		incl level_idx(%rip)
+		movl level_idx(%rip), %edx
 	set_level_trophy.locA:
 	movb $1, 0x20(%rcx,%rdx)
 	ret
 
 adventure_level_enter_1:
+	decl   %edx
 	movl   %edx, level_idx(%rip)
 	leaq   level_lut(%rip), %rcx
 	movsbq (%rcx,%rdx),     %rdx
@@ -84,15 +95,15 @@ plant_type_flatten: #This likely needs to be checked every single update
 	testl %ecx, %ecx
 	sets  %al
 	
-	cmpl  $900, %ecx
-	jc    plant_type_flatten.locB
+	cmpl $900, %ecx
+	jc   plant_type_flatten.locB
 		subl $99, %ecx
 	plant_type_flatten.locB:
 	
 	negq %rax
 	
-	cmpl  $800, %ecx
-	jc    plant_type_flatten.locC
+	cmpl $800, %ecx
+	jc   plant_type_flatten.locC
 		subl $541, %ecx
 	plant_type_flatten.locC:
 	
@@ -100,6 +111,60 @@ plant_type_flatten: #This likely needs to be checked every single update
 	jc   plant_type_flatten.locD
 		subl $207, %ecx
 	plant_type_flatten.locD:
+	
+	orq %rcx, %rax
+	
+	ret
+
+MAX_ZOMBIE = 223
+zombie_type_flatten:
+	xorl %eax, %eax
+	
+	cmpl $200, %ecx
+	jc   zombie_type_flatten.locA
+		subl $81, %ecx
+	zombie_type_flatten.locA:
+	
+	testl %ecx, %ecx
+	sets  %al
+	
+	cmpl $100, %ecx
+	jc   zombie_type_flatten.locB
+		subl $53, %ecx
+	zombie_type_flatten.locB:
+	
+	negq %rax
+	
+	cmpl $2, %ecx
+	jc   zombie_type_flatten.locC
+		decl %ecx
+	zombie_type_flatten.locC:
+	
+	orq %rcx, %rax
+	
+	ret
+
+zombie_type_widen:
+	xorl  %eax, %eax
+	testl %ecx, %ecx
+	sets  %al
+	
+	cmpl $1, %ecx
+	jc   zombie_type_widen.locA
+		incl %ecx
+	zombie_type_widen.locA:
+	
+	negq %rax
+	
+	cmpl $47, %ecx
+	jc zombie_type_widen.locB
+		addl $53, %ecx
+	zombie_type_widen.locB:
+	
+	cmpl $119, %ecx
+	jc zombie_type_widen.locC
+		addl $81, %ecx
+	zombie_type_widen.locC:
 	
 	orq %rcx, %rax
 	
@@ -197,14 +262,25 @@ wait_on_rust:
 rerandomise:
 	movl %ebp, GameAPP.theBoardType(%rcx)
 	movq %rcx, game_app_ptr(%rip)
+	cmpq $0,   mix_data_ptr(%rip)
+	jne  rerandomise.locA
+		call "MixData::InitMixData()"
+	rerandomise.locA:
 	call wait_on_rust
+	ret
+
+store_mix_data_ptr:
+	movq 0xB8(%rax), %rax
+	movq %rax, mix_data_ptr(%rip)
 	ret
 
 .section .data
 game_app_ptr:
 	.quad 0
+mix_data_ptr:
+	.quad 0
 level_idx:
-	.long 1
+	.long 0
 menu_init_array:
 	.long "PlantType::Peashooter";    .long 0
 	.long "PlantType::SunFlower";     .long 1
@@ -266,9 +342,9 @@ menu_table:
 menu_array:
 	.space 48 * 12
 level_lut:
-	.space 50, 22
+	.space 45, 1 #it's important that this stays at 1 because the first level is entered before anything gets randomised
 plant_lut:
-	.space 50, 0x0
+	.space 48, 0x0
 menu_table_initialized:
 	.byte 0
 stopped:

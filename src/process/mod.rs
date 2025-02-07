@@ -595,7 +595,7 @@ impl FusionProcess {
         data.resize(len, 0);
         let read = self.mem.read_at(&mut data[0 .. len], addr)?;
         if read != len {
-            Err(Box::new(CommonError::inconvenience("Wrong number of bytes were read")))
+            Err(Box::new(CommonError::inconvenience(&format!("Wrong number of bytes were read: {read} vs {len}"))))
         } else {
             Ok(())
         }

@@ -1,6 +1,6 @@
 .section .text
 
-.macro .utf8 char
+.macro .utf8 char #not actually used because utf16
 	.ifeq \char >> 6
 		.byte \char
 	.else
@@ -138,7 +138,7 @@ card_create_label: #seed packet cost in ecx
     subq %rcx,           %rsi
     shrl $1,             %ecx
     
-    rep movsw
+    rep movsw #slower than rep movsb on fast small rep movsb systems
     
     imull $9,   %ebx,   %ebx
     shrl  $8,           %ebx
@@ -196,17 +196,8 @@ indicator_lut:
     .word 0x0032; .word 0x0020; .word 0x007C; .word 0x0020
     .word 0x0031; .word 0x0020; .word 0x007C; .word 0x0020
     .word 0x0030; .word 0x0020; .word 0x007C; .word 0x0020
-    #.word 0x2588; .word 0x0020
-    #.word 0x2587; .word 0x0020
-    #.word 0x2586; .word 0x0020
-    #.word 0x2585; .word 0x0020
-    #.word 0x2584; .word 0x0020
-    #.word 0x2583; .word 0x0020
-    #.word 0x2582; .word 0x0020
-    #.word 0x2581; .word 0x0020
-    #.word 0x0020; .word 0x0020
 const1over254:
     .float 0.00393700787402
 plant_firerate_table:
-    .space 35 + 17 + 1 + 31 + 179, 0x00
+    .space 384, 0x00
 plant_firerate_table_end:

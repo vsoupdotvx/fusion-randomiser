@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 iced-x86 = "1.21.0"
 object   = "0.36.5"
+rand_chacha = "0.9.0"
+rand = "0.9.0"
 smallvec = "1.13.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -32,4 +34,7 @@ cc = "*"
 
 [profile.release]
 debug = true
+
+[profile.dev]
+opt-level = 1
 
