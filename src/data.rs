@@ -778,6 +778,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //24
             id_name: "ZombieType::RedGargantuar",
             default_weight: 500,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //25
@@ -793,6 +794,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //27
             id_name: "ZombieType::IronRedGargantuar",
             default_weight: 500,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //28
@@ -838,11 +840,13 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //65
             id_name: "ZombieType::CherryShooterZombie",
             default_weight: 750,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //66
             id_name: "ZombieType::SuperCherryShooterZombie",
             default_weight: 750,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //67
@@ -924,6 +928,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //76
             id_name: "ZombieType::GatlingFootballZombie",
             default_weight: 750,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //C8
