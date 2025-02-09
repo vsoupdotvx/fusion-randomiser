@@ -33,6 +33,25 @@ HASH_U32 = 0x1758F99D
 	call adventure_level_enter_2
 "ENDPrizeMgr::GoBack(&mut self)+0x142":
 
+"GiveFertilize::AnimGive(&mut self)+0x112":
+	.nops 6
+"ENDGiveFertilize::AnimGive(&mut self)+0x112":
+
+"GiveFertilize::AvaliableToGive() -> bool+0x5C":
+	movb $0x1, %al
+	nop
+"ENDGiveFertilize::AvaliableToGive() -> bool+0x5C":
+
+"AnimUIOver::Die(&mut self)+0x7D4":
+	insb
+	jmp "AnimUIOver::Die.locY"
+"ENDAnimUIOver::Die(&mut self)+0x7D4":
+
+"AnimUIOver::Die(&mut self)+0x8B5":
+	insb
+	jmp "AnimUIOver::Die.locBC"
+"ENDAnimUIOver::Die(&mut self)+0x8B5":
+
 replace_card_unlock:
 	movl  %ecx, %edx
 	call  plant_type_flatten_menu
