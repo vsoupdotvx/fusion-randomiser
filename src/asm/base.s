@@ -102,13 +102,13 @@ adventure_level_enter_2:
 	movzbl (%rdx,%rax),     %edx
 	jmp    "UIMgr::EnterGame(levelType: i32, levelNumber: i32)"
 
-MAX_PLANT = 1178
+MAX_PLANT = 1181
 plant_type_flatten: #This likely needs to be checked every single update
 	xorl %eax,  %eax
 	
 	cmpl $1000, %ecx
 	jc   plant_type_flatten.locA
-		subl $69, %ecx
+		subl $68, %ecx
 	plant_type_flatten.locA:
 	
 	testl %ecx, %ecx
@@ -149,7 +149,7 @@ zombie_type_flatten:
 	
 	cmpl $100, %ecx
 	jc   zombie_type_flatten.locB
-		subl $53, %ecx
+		subl $51, %ecx
 	zombie_type_flatten.locB:
 	
 	negq %rax
@@ -175,9 +175,9 @@ zombie_type_widen:
 	
 	negq %rax
 	
-	cmpl $47, %ecx
+	cmpl $49, %ecx
 	jc zombie_type_widen.locB
-		addl $53, %ecx
+		addl $51, %ecx
 	zombie_type_widen.locB:
 	
 	cmpl $119, %ecx

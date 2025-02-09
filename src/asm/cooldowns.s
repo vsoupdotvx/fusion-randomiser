@@ -9,7 +9,7 @@ store_cooldown:
 	
 	movss CardUI.fullCD(%rbx), %xmm1
 	movl CardUI.theSeedType(%rbx), %ecx
-	cmpl $1160, %ecx
+	cmpl $1181, %ecx
 	ja   store_cooldown.locA
 		call plant_type_flatten_menu
 		cmpl $45, %eax

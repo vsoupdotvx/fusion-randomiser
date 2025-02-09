@@ -36,7 +36,7 @@
 
 plant_get_firerate:
 	movl Plant.thePlantType(%rbx), %edx
-	cmpl $1178, %edx #MAX_PLANT
+	cmpl $1181, %edx #MAX_PLANT
 	ja   plant_get_firerate.locA
 		call     plant_type_flatten
 		

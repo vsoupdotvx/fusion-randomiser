@@ -833,6 +833,16 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             ..ZombieData::default()
         },
+        ZombieData { //2F
+            id_name: "ZombieType::SnowZombie",
+            default_weight: 750,
+            ..ZombieData::default()
+        },
+        ZombieData { //30
+            id_name: "ZombieType::NewYearZombie",
+            default_weight: 750,
+            ..ZombieData::default()
+        },
         ZombieData { //64
             id_name: "ZombieType::PeaShooterZombie",
             default_weight: 1000,

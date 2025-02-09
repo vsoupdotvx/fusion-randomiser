@@ -90,6 +90,6 @@ pick_zombie:
 .section .data
 zombie_spawn_bitfield: #size: 46 + 19 + 24 = 89
 	.quad 0xFFFFAFFFFFFFFFFF
-	.quad 0x1FFFFFF
+	.quad 0x7FFFFFF
 zombie_weights:
 	.space 512, 0x0

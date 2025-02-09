@@ -8,7 +8,7 @@
 cmp_and_store_cost:
 	movl CardUI.theSeedCost(%rbx), %edx
 	movl CardUI.theSeedType(%rbx), %ecx
-	cmpl $1160, %ecx
+	cmpl $1181, %ecx
 	ja   cmp_and_store_cost.locA
 		call plant_type_flatten_menu
 		cmpl $41, %eax
