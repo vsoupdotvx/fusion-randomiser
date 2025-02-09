@@ -12,6 +12,8 @@
 	jmp pick_zombie
 "ENDInitZombieList::PickZombie() -> ZombieType":
 
+insb
+
 init_zombie_list:
 	movq %rcx, %rbx
 	
