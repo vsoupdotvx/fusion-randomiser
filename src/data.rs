@@ -815,6 +815,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //2B
             id_name: "ZombieType::SuperGargantuar",
             default_weight: 500,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //2C
