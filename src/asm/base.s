@@ -30,7 +30,7 @@ HASH_U32 = 0x1758F99D
 "ENDMixData::InitMixData()+0x77":
 
 "PrizeMgr::GoBack(&mut self)+0x142":
-	call adventure_level_enter_2
+	jmp adventure_level_enter_2
 "ENDPrizeMgr::GoBack(&mut self)+0x142":
 
 "GiveFertilize::AnimGive(&mut self)+0x112":
