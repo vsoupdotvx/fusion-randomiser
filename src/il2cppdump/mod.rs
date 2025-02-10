@@ -696,7 +696,7 @@ impl IL2CppStruct {
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }
@@ -726,7 +726,7 @@ impl IL2CppStruct {
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }
@@ -740,7 +740,7 @@ impl IL2CppStruct {
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx as u32, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }
@@ -811,8 +811,8 @@ impl IL2CppStruct {
             } else {
                 match byte {
                     0xF0 => u32::from_le_bytes(meta.metadata[off+1..off+5].try_into().unwrap()),
-                    0xFE => u32::max_value() - 1,
-                    0xFF => u32::max_value(),
+                    0xFE => u32::MAX - 1,
+                    0xFF => u32::MAX,
                     other => panic!("Invalid compressed int start byte: {}", other)
                 }
             }
@@ -820,8 +820,8 @@ impl IL2CppStruct {
         
         fn read_compressed_i32(meta: &IL2CppDumper, off: usize) -> i32 {
             let int = read_compressed_u32(meta, off);
-            if int == u32::max_value() {
-                i32::min_value()
+            if int == u32::MAX {
+                i32::MIN
             } else if int & 0x1 == 0 {
                 (int >> 1) as i32
             } else {
@@ -835,8 +835,8 @@ impl IL2CppStruct {
                     &meta.fields.as_slice_of(&meta.metadata)
                     [(self.field_start as usize + field_idx) * FIELD_STRIDE .. (self.field_start as usize + field_idx) * FIELD_STRIDE + FIELD_STRIDE]
                 );
-                let typ = &meta.types_array[field.type_idx as usize];
-                if typ.attrs & 0x50 != 0 || true { //is const
+                //let typ = &meta.types_array[field.type_idx as usize];
+                if true { //is const
                     //TODO: something
                     if let Some(field_default_idx) = meta.field_default_lookup.get(&(field_idx as i32 + self.field_start)) {
                         let il2cppdefault = IL2CppFieldDefault::from_bytes(
@@ -1271,6 +1271,7 @@ impl IL2CppDumper {
                 for type_idx in icgm.1.img.type_start as usize .. icgm.1.img.type_start as usize + icgm.1.img.type_count as usize {
                     let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[type_idx*STRUCT_STRIDE..type_idx*STRUCT_STRIDE+STRUCT_STRIDE]);
                     if il2cppstruct.method_start >= 0 {
+                        #[allow(clippy::needless_range_loop)]
                         for method_idx in il2cppstruct.method_start as usize .. il2cppstruct.method_start as usize + il2cppstruct.method_count as usize {
                             resolved_method_array[method_idx] = Some(unsafe {NonZero::new_unchecked(icgm.0 as u16 + 1)});
                             let token = (self.methods_array[method_idx].metadata.token & 0xffffff) - 1;
@@ -1290,7 +1291,7 @@ impl IL2CppDumper {
                 }
             }
         }
-        
+        #[allow(clippy::needless_range_loop)]
         for method_idx in 0..self.methods_array.len() {
             let method = &mut self.methods_array[method_idx];
             let token  = (method.metadata.token & 0xffffff) - 1;
@@ -1399,6 +1400,7 @@ impl IL2CppDumper {
         }
     }
     
+    #[allow(clippy::result_unit_err)]
     pub fn output_disasm<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
         let mut sorted: Vec<u32> = Vec::with_capacity(self.methods_array.len());
         for i in 0..self.methods_array.len() {
@@ -1431,9 +1433,10 @@ impl IL2CppDumper {
                         let mut current_idx = 0;
                         let mut out_str = String::new();
                         loop {
-                            loop {
+                            {
                                 let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
-                                for i in current_idx..sorted_ref.len() {
+                                let tmp = current_idx;
+                                for i in tmp..sorted_ref.len() {
                                     let taken = bool_mutex.get_mut(i).unwrap();
                                     if *taken {
                                         current_idx = i + 1;
@@ -1442,7 +1445,6 @@ impl IL2CppDumper {
                                         break;
                                     }
                                 }
-                                break;
                             }
                             
                             if current_idx == sorted_ref.len() {
@@ -1475,6 +1477,7 @@ impl IL2CppDumper {
         Ok(())
     }
     
+    #[allow(clippy::result_unit_err)]
     pub fn output_structs<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
         let structs_len = self.type_definitions.siz as usize / STRUCT_STRIDE;
         
@@ -1509,9 +1512,10 @@ impl IL2CppDumper {
                         let mut current_idx = 0;
                         let mut out_str = String::new();
                         loop {
-                            loop {
+                            {
                                 let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
-                                for i in current_idx..sorted_ref.len() {
+                                let tmp = current_idx;
+                                for i in tmp..sorted_ref.len() {
                                     let taken = bool_mutex.get_mut(i).unwrap();
                                     if *taken {
                                         current_idx = i + 1;
@@ -1520,7 +1524,6 @@ impl IL2CppDumper {
                                         break;
                                     }
                                 }
-                                break;
                             }
                             
                             if current_idx == sorted_ref.len() {

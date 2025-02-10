@@ -37,6 +37,7 @@ use super::FusionProcess;
 #[derive(Debug)]
 #[allow(dead_code)]
 #[repr(C)]
+#[allow(clippy::enum_variant_names)]
 enum Request
 {
     ReqNewProcess = 0,
@@ -381,6 +382,7 @@ pub fn get_request_offset_table_for_version(version: u32) -> Vec<u32> {
 #[derive(Debug)]
 #[allow(dead_code)]
 #[repr(C)]
+#[allow(clippy::enum_variant_names)]
 enum ApcType {
     ApcNone = 0,
     ApcUser,
@@ -678,15 +680,20 @@ impl FusionProcess {
         }
         
         if let Some(args) = args {
-            let iov = {
+            let (iov, len) = {
+                let mut len = 64;
                 let mut vec: Vec<IoSlice> = Vec::with_capacity(args.len()+1);
                 vec.push(IoSlice::new(&req));
                 for a in args {
                     vec.push(IoSlice::new(a));
+                    len += a.len()
                 }
-                vec
+                (vec, len)
             };
-            self.request_pipe.write_vectored(&iov).unwrap();
+            let written = self.request_pipe.write_vectored(&iov).unwrap();
+            if written != len {
+                panic!("Wrong number of bytes written ({written} vs {len})");
+            }
         } else {
             self.request_pipe.write_all(&req).unwrap();
         }
@@ -694,11 +701,14 @@ impl FusionProcess {
     
     fn recv_reply<T>(&mut self, reply: &mut T, args: Option<&mut Vec<u8>>) {
         let mut reply_buf = [0u8;64];
-        let iov = &mut vec![
+        let iov = &mut [
             IoSliceMut::new(unsafe {slice::from_raw_parts_mut(reply as *mut T as *mut u8, size_of_val(reply))}),
             IoSliceMut::new(&mut reply_buf[size_of_val(reply)..64])
         ];
-        self.reply_pipe_r.read_vectored(iov).unwrap();
+        let read = self.reply_pipe_r.read_vectored(iov).unwrap();
+        if read != 64 {
+            panic!("Read wrong number of bytes ({read} vs 64)");
+        }
         let reply_extra = u32::from_le_bytes(
             unsafe {
                 slice::from_raw_parts((reply as *const T as *const u8).add(4), 4)
@@ -706,9 +716,9 @@ impl FusionProcess {
         );
         
         if reply_extra != 0 {
-            if let Some(mut args) = args {
+            if let Some(args) = args {
                 args.resize(reply_extra as usize, 0);
-                self.reply_pipe_r.read(&mut args).unwrap();
+                self.reply_pipe_r.read_exact(args).unwrap();
             } else {
                 panic!("Reply with extra data recieved while args is None");
             }
@@ -716,10 +726,8 @@ impl FusionProcess {
     }
     
     fn recv_wait<T>(&mut self, reply: &mut T) {
-        let iov = &mut vec![
-            IoSliceMut::new(unsafe {slice::from_raw_parts_mut(reply as *mut T as *mut u8, size_of_val(reply))}),
-        ];
-        self.wait_pipe_r.read_vectored(iov).unwrap();
+        let buf = &mut unsafe {slice::from_raw_parts_mut(reply as *mut T as *mut u8, size_of_val(reply))};
+        self.wait_pipe_r.read_exact(buf).unwrap();
     }
     
     pub fn get_fusion_handle_preinit(request_pipe: &mut File, reply_pipe: &mut PipeReader, pid: i32, request_offset_table: &[u32]) -> Option<u32> {
@@ -793,11 +801,14 @@ impl FusionProcess {
     
     fn recv_reply_preinit<T>(reply_pipe: &mut PipeReader, reply: &mut T, args: Option<&mut Vec<u8>>) {
         let mut reply_buf = [0u8;64];
-        let iov = &mut vec![
+        let iov = &mut [
             IoSliceMut::new(unsafe {slice::from_raw_parts_mut(reply as *mut T as *mut u8, size_of_val(reply))}),
             IoSliceMut::new(&mut reply_buf[size_of_val(reply)..64])
         ];
-        reply_pipe.read_vectored(iov).unwrap();
+        let read = reply_pipe.read_vectored(iov).unwrap();
+        if read != 64 {
+            panic!("Read wrong number of bytes ({read} vs 64)");
+        }
         let reply_extra = u32::from_le_bytes(
             unsafe {
                 slice::from_raw_parts((reply as *const T as *const u8).add(4), 4)
@@ -805,9 +816,9 @@ impl FusionProcess {
         );
         
         if reply_extra != 0 {
-            if let Some(mut args) = args {
+            if let Some(args) = args {
                 args.resize(reply_extra as usize, 0);
-                reply_pipe.read(&mut args).unwrap();
+                reply_pipe.read_exact(args).unwrap();
             } else {
                 panic!("Reply with extra data recieved while args is None");
             }
@@ -828,15 +839,20 @@ impl FusionProcess {
         }
         
         if let Some(args) = args {
-            let iov = {
+            let (iov, len) = {
+                let mut len = 64;
                 let mut vec: Vec<IoSlice> = Vec::with_capacity(args.len()+1);
                 vec.push(IoSlice::new(&req));
                 for a in args {
                     vec.push(IoSlice::new(a));
+                    len += a.len()
                 }
-                vec
+                (vec, len)
             };
-            request_pipe.write_vectored(&iov).unwrap();
+            let written = request_pipe.write_vectored(&iov).unwrap();
+            if written != len {
+                panic!("Wrong number of bytes written ({written} vs {len})");
+            }
         } else {
             request_pipe.write_all(&req).unwrap();
         }
@@ -855,7 +871,7 @@ impl FusionProcess {
         ancillary.add_fds(&[fd]);
         
         wineserver_socket.send_vectored_with_ancillary(
-            &[IoSlice::new(&req_bytes)],
+            &[IoSlice::new(req_bytes)],
             &mut ancillary
         ).unwrap();
     }

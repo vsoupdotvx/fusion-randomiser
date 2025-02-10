@@ -104,7 +104,7 @@ impl FusionProcess {
     }
     
     pub fn write_memory(&mut self, addr: u64, data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        if data.len() > 0 {
+        if !data.is_empty() {
             #[cfg(target_os = "linux")]
             self.write_memory_linux(addr, data)?;
             #[cfg(target_os = "windows")]
@@ -435,7 +435,7 @@ impl FusionProcess {
             }
         }
         
-        if server_path_vec.len() == 0 {
+        if server_path_vec.is_empty() {
             return Err(Box::new(CommonError::critical("No wineservers found!")));
         } else if server_path_vec.len() > 1 {
             return Err(Box::new(CommonError::inconvenience("Multiple wineservers found!")));
@@ -465,12 +465,10 @@ impl FusionProcess {
         
         let mut request_fd: Option<i32> = None;
         
-        for ancillary_result in ancillary.messages() {
-            if let Ok(ancillary_data) = ancillary_result {
-                if let AncillaryData::ScmRights(rights) = ancillary_data {
-                    for fd in rights {
-                        request_fd = Some(fd);
-                    }
+        for ancillary_data in ancillary.messages().flatten() {
+            if let AncillaryData::ScmRights(rights) = ancillary_data {
+                for fd in rights {
+                    request_fd = Some(fd);
                 }
             }
         }
@@ -498,7 +496,7 @@ impl FusionProcess {
         
         let mut dll_file = File::open(files_dir.clone().unwrap().join("GameAssembly.dll"))?;
         let mut dll_data = vec![0; dll_file.metadata()?.len() as usize];
-        dll_file.read(&mut dll_data)?;
+        dll_file.read_exact(&mut dll_data)?;
         let dll_data = dll_data.into_boxed_slice();
         let dll_obj = object::File::parse(&*dll_data)?;
         let dll_text = dll_obj.section_by_name(".text").unwrap().data()?;

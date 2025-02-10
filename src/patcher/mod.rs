@@ -107,10 +107,7 @@ impl Patch {
                                     &branch_target_table,
                                     &sections,
                                     instruction.near_branch64() as i64 - instruction.next_ip() as i64,
-                                    match instruction.mnemonic() {
-                                        Mnemonic::Call => true,
-                                        _ => false
-                                    },
+                                    matches!(instruction.mnemonic(), Mnemonic::Call),
                                 ));
                             } else {
                                 rev_imm_lookup.push(instruction_idx);
@@ -127,10 +124,7 @@ impl Patch {
                                 &branch_target_table,
                                 &sections,
                                 instruction.near_branch64() as i64 - instruction.next_ip() as i64,
-                                match instruction.mnemonic() {
-                                    Mnemonic::Call => true,
-                                    _ => false
-                                },
+                                matches!(instruction.mnemonic(), Mnemonic::Call),
                             ));
                         }
                         near_branches.push((instruction_idx as u32, idx as u32));
@@ -288,7 +282,7 @@ impl Patch {
         
         let mut injections: SmallVec<[Injection; 16]> = SmallVec::new();
         for (original_name, start_off) in sym_names.iter().rev() {
-            let search = "END".to_owned() + &original_name;
+            let search = "END".to_owned() + original_name;
             for (name, end_off) in &sym_names {
                 if name == &search {
                     let start_idx      = *branch_target_table.get(&(start_off + 0x40_0000)).expect("Injection start not instruction aligned");
@@ -306,10 +300,7 @@ impl Patch {
                                 if orig_off == end_idx {
                                     if let Some(instruction_off) = rev_imm_lookup.get(imm_idx) {
                                         if (start_idx..end_idx).contains(instruction_off) {
-                                            imm_replace = match imm {
-                                                Immediate::InstructionOffset(_) => true,
-                                                _ => false,
-                                            }
+                                            imm_replace = matches!(imm, Immediate::InstructionOffset(_))
                                         }
                                     }
                                 } else if (start_idx..end_idx).contains(&orig_off) {
@@ -364,7 +355,7 @@ impl Patch {
     }
     
     pub fn apply_patches(patches: &[Patch], meta: &IL2CppDumper, fusion: &mut FusionProcess) -> HashMap<String, u64> {
-        let mut patches: Vec<Patch> = patches.into_iter().map(|patch| patch.clone()).collect();
+        let mut patches: Vec<Patch> = patches.to_vec();
         
         let mut il2cpp_syms: HashMap<String, u64> = HashMap::with_capacity(meta.methods_array.len()*3);
         
@@ -444,7 +435,7 @@ impl Patch {
             }
         }
         
-        let data_section_size = (data_section_off + 0xFFF) & !0xFFF - fusion.asm_offset;
+        let data_section_size = ((data_section_off + 0xFFF) & !0xFFF) - fusion.asm_offset;
         let mut text_section_off = (data_section_off + 0xFFF) & !0xFFF;
         
         let mut text_off_vecs: Vec<Vec<u32>> = Vec::with_capacity(patches.len());
@@ -498,7 +489,7 @@ impl Patch {
                     Mnemonic::Insb |
                     Mnemonic::Insd => 0,
                     _ => {
-                        let mut instruction = original_instruction.clone();
+                        let mut instruction = *original_instruction;
                         fill_in_imms_phase_1(&mut instruction, &patch.imm_vec, text_section_off + current_offset as u64, fusion.dll_offset);
                         match encoder.encode(&instruction, text_section_off + current_offset as u64) {
                             Ok(sz) => sz as u32,
@@ -552,7 +543,7 @@ impl Patch {
                     Mnemonic::Insb |
                     Mnemonic::Insd => 0,
                     _ => {
-                        let mut instruction = original_instruction.clone();
+                        let mut instruction = *original_instruction;
                         fill_in_imms_phase_1(&mut instruction, &patch.imm_vec, text_section_off + current_offset as u64, fusion.dll_offset);
                         encoder.encode(&instruction, text_section_off + current_offset as u64).expect("Phase 2 encoding error") as u32
                     }
@@ -605,7 +596,7 @@ impl Patch {
                     Mnemonic::Insb |
                     Mnemonic::Insd => 0,
                     _ => {
-                        let mut instruction = original_instruction.clone();
+                        let mut instruction = *original_instruction;
                         fill_in_imms_phase_2(
                             &mut instruction,
                             &patch.imm_vec,
@@ -665,8 +656,8 @@ impl Patch {
                     }
                 }
                 let pad_len = ((all_data.len() + 0xF) & !0xF) - all_data.len();
-                all_data.write(&vec![0; pad_len]).unwrap();
-                all_data.write(data).unwrap();
+                all_data.write_all(&vec![0; pad_len]).unwrap();
+                all_data.write_all(data).unwrap();
             }
         }
         
@@ -675,7 +666,7 @@ impl Patch {
             for byte in &all_data {
                 print!("{:02X} ", byte);
             }
-            println!("")
+            println!();
         }
         
         fusion.write_memory(fusion.asm_offset, &all_data).unwrap();
@@ -735,7 +726,7 @@ impl Patch {
                         Mnemonic::Insb |
                         Mnemonic::Insd => 0,
                         _ => {
-                            let mut instruction = original_instruction.clone();
+                            let mut instruction = *original_instruction;
                             fill_in_imms_phase_1(&mut instruction, &patch.imm_vec, injection.off + current_offset as u64, fusion.dll_offset);
                             encoder.encode(&instruction, injection.off + current_offset as u64).expect("Phase 1 encoding error") as u32
                         }
@@ -781,7 +772,7 @@ impl Patch {
                         Mnemonic::Insb |
                         Mnemonic::Insd => 0,
                         _ => {
-                            let mut instruction = original_instruction.clone();
+                            let mut instruction = *original_instruction;
                             fill_in_imms_phase_1(&mut instruction, &patch.imm_vec, injection.off + current_offset as u64, fusion.dll_offset);
                             encoder.encode(&instruction, injection.off + current_offset as u64).expect("Phase 2 encoding error") as u32
                         }
@@ -804,7 +795,7 @@ impl Patch {
                         Mnemonic::Insb |
                         Mnemonic::Insd => 0,
                         _ => {
-                            let mut instruction = original_instruction.clone();
+                            let mut instruction = *original_instruction;
                             fill_in_imms_phase_2(
                                 &mut instruction,
                                 &patch.imm_vec,
@@ -851,6 +842,7 @@ pub struct DataReloc {
 #[allow(dead_code)]
 #[derive(Debug)]
 #[derive(Clone)]
+#[allow(clippy::enum_variant_names)]
 enum Immediate {
     PatchInstructionOffset(usize, usize),
     InstructionOffset(usize),
@@ -918,6 +910,7 @@ fn get_instruction_imm_idxs(instruction: &Instruction) -> SmallVec<[(OpKind,usiz
     ret
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fill_in_imms_phase_2(
     instruction: &mut Instruction,
     imm_vec: &[Immediate],
@@ -996,11 +989,9 @@ fn fill_in_imms_phase_2(
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
                 let imm = &imm_vec[instruction.immediate(i as u32) as usize];
-                match imm {
-                    Immediate::Immediate(value) => {
-                        instruction.set_immediate_u64(i as u32, *value);
-                    }
-                    _ => {}
+                
+                if let Immediate::Immediate(value) = imm {
+                    instruction.set_immediate_u64(i as u32, *value);
                 }
             }
             _ => {}
@@ -1060,11 +1051,8 @@ fn fill_in_imms_phase_1(instruction: &mut Instruction, imm_vec: &[Immediate], ip
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
                 let imm = &imm_vec[instruction.immediate(i as u32) as usize];
-                match imm {
-                    Immediate::Immediate(value) => {
-                        instruction.set_immediate_u64(i as u32, *value);
-                    }
-                    _ => {}
+                if let Immediate::Immediate(value) = imm {
+                    instruction.set_immediate_u64(i as u32, *value);
                 }
             }
             _ => {}
@@ -1075,18 +1063,15 @@ fn fill_in_imms_phase_1(instruction: &mut Instruction, imm_vec: &[Immediate], ip
 fn change_imm_size_variable_v3(instruction: &mut Instruction, instruction_idx: usize, imm_vec: &[Immediate], offsets: &[u32]) {
     change_imm_size_variable(instruction, imm_vec);
     for op in instruction.op_kinds() {
-        match op {
-            OpKind::NearBranch64 => {
-                if let Immediate::PatchInstructionOffset(_, idx) = imm_vec[instruction.near_branch64() as usize] {
-                    let branch_val = offsets[idx] as i64 - offsets[instruction_idx+1] as i64;
-                    if i8::try_from(branch_val).is_ok() {
-                        instruction.as_short_branch();
-                    } else {
-                        instruction.as_near_branch();
-                    }
+        if OpKind::NearBranch64 == op {
+            if let Immediate::PatchInstructionOffset(_, idx) = imm_vec[instruction.near_branch64() as usize] {
+                let branch_val = offsets[idx] as i64 - offsets[instruction_idx+1] as i64;
+                if i8::try_from(branch_val).is_ok() {
+                    instruction.as_short_branch();
+                } else {
+                    instruction.as_near_branch();
                 }
             }
-            _ => {}
         }
     }
 }
@@ -1094,18 +1079,15 @@ fn change_imm_size_variable_v3(instruction: &mut Instruction, instruction_idx: u
 fn change_imm_size_variable_v2(instruction: &mut Instruction, instruction_idx: usize, imm_vec: &[Immediate], offsets: &[u32]) {
     change_imm_size_variable(instruction, imm_vec);
     for op in instruction.op_kinds() {
-        match op {
-            OpKind::NearBranch64 => {
-                if let Immediate::InstructionOffset(idx) = imm_vec[instruction.near_branch64() as usize] {
-                    let branch_val = offsets[idx] as i64 - offsets[instruction_idx+1] as i64;
-                    if i8::try_from(branch_val).is_ok() {
-                        instruction.as_short_branch();
-                    } else {
-                        instruction.as_near_branch();
-                    }
+        if OpKind::NearBranch64 == op {
+            if let Immediate::InstructionOffset(idx) = imm_vec[instruction.near_branch64() as usize] {
+                let branch_val = offsets[idx] as i64 - offsets[instruction_idx+1] as i64;
+                if i8::try_from(branch_val).is_ok() {
+                    instruction.as_short_branch();
+                } else {
+                    instruction.as_near_branch();
                 }
             }
-            _ => {}
         }
     }
 }
@@ -1322,13 +1304,8 @@ fn change_imm_size_large(instruction: &mut Instruction) {
         _ => {}
     }
     for op in instruction.op_kinds() {
-        match op {
-            OpKind::Memory => {
-                if instruction.memory_displ_size() != 0 {
-                    instruction.set_memory_displ_size(8);
-                }
-            }
-            _ => {}
+        if OpKind::Memory == op && instruction.memory_displ_size() != 0{
+            instruction.set_memory_displ_size(8);
         }
     }
 }
@@ -1367,13 +1344,8 @@ fn change_imm_size_dword(instruction: &mut Instruction) {
         _ => {}
     }
     for op in instruction.op_kinds() {
-        match op {
-            OpKind::Memory => {
-                if instruction.memory_displ_size() != 0 {
-                    instruction.set_memory_displ_size(8);
-                }
-            }
-            _ => {}
+        if OpKind::Memory == op && instruction.memory_displ_size() != 0{
+            instruction.set_memory_displ_size(8);
         }
     }
 }
@@ -1412,17 +1384,12 @@ fn change_imm_size_small(instruction: &mut Instruction) {
         _ => {}
     }
     for op in instruction.op_kinds() {
-        match op {
-            OpKind::Memory => {
-                if instruction.memory_displ_size() != 0 {
-                    if instruction.is_ip_rel_memory_operand() {
-                        instruction.set_memory_displ_size(8);
-                    } else {
-                        instruction.set_memory_displ_size(1);
-                    }
-                }
+        if OpKind::Memory == op && instruction.memory_displ_size() != 0 {
+            if instruction.is_ip_rel_memory_operand() {
+                instruction.set_memory_displ_size(8);
+            } else {
+                instruction.set_memory_displ_size(1);
             }
-            _ => {}
         }
     }
 }
@@ -1518,16 +1485,16 @@ fn reloc_to_immediate(
             if symbol.is_undefined() {
                 match reloc.kind() {
                     RelocationKind::Absolute => {
-                        return Immediate::UnresolvedSymbol(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend);
+                        Immediate::UnresolvedSymbol(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend)
                     }
                     RelocationKind::Relative => {
-                        return Immediate::UnresolvedSymbolRel(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend);
+                        Immediate::UnresolvedSymbolRel(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend)
                     }
                     RelocationKind::PltRelative => {
-                        return Immediate::UnresolvedSymbolRel(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend);
+                        Immediate::UnresolvedSymbolRel(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend)
                     }
                     RelocationKind::Unknown => {
-                        return Immediate::UnresolvedSymbol(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend);
+                        Immediate::UnresolvedSymbol(symbol.name().unwrap().to_owned(), reloc.addend() + implicit_addend)
                     }
                     _ => panic!("Unsupported reloc kind for external symbol")
                 }
@@ -1542,16 +1509,16 @@ fn reloc_to_immediate(
                                 match reloc.kind() {
                                     RelocationKind::Absolute => {
                                         if is_call {
-                                            return Immediate::InstructionOffsetCall(*instruction_idx);
+                                            Immediate::InstructionOffsetCall(*instruction_idx)
                                         } else {
-                                            return Immediate::InstructionOffset(*instruction_idx);
+                                            Immediate::InstructionOffset(*instruction_idx)
                                         }
                                     }
                                     RelocationKind::Unknown => { //untested
                                         if is_call {
-                                            return Immediate::InstructionOffsetCall(*instruction_idx);
+                                            Immediate::InstructionOffsetCall(*instruction_idx)
                                         } else {
-                                            return Immediate::InstructionOffset(*instruction_idx);
+                                            Immediate::InstructionOffset(*instruction_idx)
                                         }
                                     }
                                     _ => panic!("Unsupported reloc kind for symbol in text section")
@@ -1560,13 +1527,13 @@ fn reloc_to_immediate(
                             SectionKind::Data => {
                                 match reloc.kind() {
                                     RelocationKind::Absolute => {
-                                        return Immediate::DataSymbol(reloc.addend() + implicit_addend);
+                                        Immediate::DataSymbol(reloc.addend() + implicit_addend)
                                     }
                                     RelocationKind::Relative => {
-                                        return Immediate::DataSymbolRel(reloc.addend() + implicit_addend);
+                                        Immediate::DataSymbolRel(reloc.addend() + implicit_addend)
                                     }
                                     RelocationKind::Unknown => {
-                                        return Immediate::DataSymbol(reloc.addend() + implicit_addend);
+                                        Immediate::DataSymbol(reloc.addend() + implicit_addend)
                                     }
                                     _ => panic!("Unsupported reloc kind for symbol in data section")
                                 }

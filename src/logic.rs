@@ -32,34 +32,34 @@ impl RandomisationData {
         costs.push(vec![0; 2]);
         spawns.push(vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
         
-        for level_idx in 1..45 {
+        for (level_true_idx, level_idx) in (1..45).zip(level_order.iter().skip(1)) {
             weights.push(
                 Self::randomise_weights_no_restrictions(
-                    seed ^ hash_str(&level_idx.to_string()),
+                    seed ^ hash_str(&level_true_idx.to_string()),
                 )
             );
             firerates.push(
                 Self::randomise_firerates_no_restrictions(
-                    seed ^ hash_str(&level_idx.to_string()),
+                    seed ^ hash_str(&level_true_idx.to_string()),
                     &plant_ids,
                     fuse_data,
                 )
             );
             cooldowns.push(
                 Self::randomise_cooldowns_no_restrictions(
-                    seed ^ hash_str(&level_idx.to_string()),
+                    seed ^ hash_str(&level_true_idx.to_string()),
                 )
             );
             costs.push(
                 Self::randomise_costs_no_restrictions(
-                    seed ^ hash_str(&level_idx.to_string()),
+                    seed ^ hash_str(&level_true_idx.to_string()),
                 )
             );
             spawns.push(
                 Self::randomise_spawns_no_restrictions(
                     seed ^ hash_str(&level_idx.to_string()),
-                    level_order[level_idx] as usize,
-                    level_idx as usize,
+                    *level_idx as usize,
+                    level_true_idx,
                 )
             );
         }
@@ -99,7 +99,7 @@ impl RandomisationData {
         
         #[allow(static_mut_refs)]
         for zombie in unsafe {ZOMBIE_DATA.as_ref()}.unwrap() {
-            let num = rng.try_next_u32().unwrap() as f64 / u32::max_value() as f64;
+            let num = rng.try_next_u32().unwrap() as f64 / u32::MAX as f64;
             let weight_mul = 10.0f64.powf(((64. / 15. * num - 32. / 5.) * num + 62. / 15.) * num - 1.);
             for byte in ((weight_mul * zombie.default_weight as f64).round() as i32).to_le_bytes() {
                 ret.push(byte);
@@ -199,7 +199,7 @@ impl RandomisationData {
         #[allow(static_mut_refs)]
         let level = &unsafe{LEVEL_DATA.as_ref()}.unwrap()[level_idx - 1];
         
-        fn xor_bit_in_bitfield(bit: usize, bitfield: &mut Vec<u8>) {
+        fn xor_bit_in_bitfield(bit: usize, bitfield: &mut [u8]) {
             bitfield[bit >> 3] ^= 1 << (bit & 7) as u8;
         }
         
@@ -209,24 +209,20 @@ impl RandomisationData {
         
         #[allow(static_mut_refs)]
         for (i, zombie) in unsafe {ZOMBIE_DATA.as_ref()}.unwrap().iter().enumerate() {
-            match zombie.allowed_lanes {
-                ZombieLanes::Water => {
-                    match level.level_type {
-                        LevelType::Pool |
-                        LevelType::Fog => {}
-                        _ => continue
-                    }
+            if let ZombieLanes::Water = zombie.allowed_lanes {
+                match level.level_type {
+                    LevelType::Pool |
+                    LevelType::Fog => {}
+                    _ => continue
                 }
-                _ => {}
             }
             if zombie.is_odyssey && level_true_idx <= 30 {
                 continue;
             }
             
             let val = rng.next_u32();
-            if !zombie.is_odyssey && val >= u32::max_value() / 20 {
-                continue;
-            } else if zombie.is_odyssey && val >= u32::max_value() / 60 {
+            if (!zombie.is_odyssey && val >= u32::MAX / 20) ||
+                (zombie.is_odyssey && val >= u32::MAX / 60) {
                 continue;
             }
             

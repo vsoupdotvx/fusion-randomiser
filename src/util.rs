@@ -31,7 +31,7 @@ impl Display for CommonError {
             ErrorSeverity::Critical      => "CRITICAL",
             ErrorSeverity::Inconvenience => "Inconvenience",
         };
-        f.write_str(&severity_string)?;
+        f.write_str(severity_string)?;
         f.write_str(": ")?;
         f.write_str(&self.string)?;
         Ok(())
@@ -44,7 +44,7 @@ impl Debug for CommonError {
             ErrorSeverity::Critical      => "CRITICAL",
             ErrorSeverity::Inconvenience => "Inconvenience",
         };
-        f.write_str(&severity_string)?;
+        f.write_str(severity_string)?;
         f.write_str(": ")?;
         f.write_str(&self.string)?;
         Ok(())

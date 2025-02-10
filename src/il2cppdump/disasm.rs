@@ -258,6 +258,8 @@ impl Method {
             *out_str += "\n";
         }
     }
+    
+    #[allow(clippy::type_complexity)]
     pub fn get_locs_loops_calls_endret(&self, instructions: &[Instruction], meta: &IL2CppDumper) -> (HashMap<u64, usize>, HashMap<u64, usize>, HashMap<u64, usize>, usize) {
         let mut locs:          HashMap<u64, usize> = HashMap::with_capacity(32);
         let mut loops:         HashMap<u64, usize> = HashMap::with_capacity(32);
