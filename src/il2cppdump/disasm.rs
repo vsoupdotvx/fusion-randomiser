@@ -445,13 +445,8 @@ impl RegData {
             Code::Call_rel32_64 => {
                 if let Some(idx) = meta.method_addr_table.get(&instruction.near_branch64()) {
                     let method = &meta.methods_array[*idx as usize];
-                    let return_type = IL2CppParameter::from_bytes(
-                        &meta.parameters.as_slice_of(&meta.metadata)[
-                            method.metadata.return_type as usize * PARAMETER_STRIDE .. method.metadata.return_type as usize * PARAMETER_STRIDE + PARAMETER_STRIDE
-                        ]
-                    );
-                    if return_type.type_idx >= 0 {
-                        let typ = &meta.types_array[return_type.type_idx as usize];
+                    if method.metadata.return_type >= 0 {
+                        let typ = &meta.types_array[method.metadata.return_type as usize];
                         self.gprs[0] = typ.get_struct();
                     } else {
                         self.gprs[0] = None
