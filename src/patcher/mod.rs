@@ -194,7 +194,9 @@ impl Patch {
                         OpKind::Immediate8to32 |
                         OpKind::Immediate8to64 |
                         OpKind::Immediate32to64 => {
-                            instruction.set_immediate_u64(op_idx as u32, *idx as u64);
+                            instruction.set_op_kind(op_idx as u32, OpKind::Immediate32to64);
+                            instruction.set_immediate_u32(op_idx as u32, *idx);
+                            instruction.set_op_kind(op_idx as u32, op_kind);
                         }
                         _ => {}
                     }
@@ -631,7 +633,13 @@ impl Patch {
                         Immediate::InstructionOffsetCall(idx) => text_off_vecs[patch_idx][*idx] as u64 + section_offs[patch_idx].1,
                         Immediate::UnresolvedSymbol(name, addend) =>
                             match il2cpp_syms.get(name) {
-                                None => panic!("Could not find unresolved symbol {name}"),
+                                None => {
+                                    if let Some(name) = name.strip_prefix("OR_NULL ") {
+                                        il2cpp_syms.get(name).map(|x| (*x as i64 + *addend) as u64).unwrap_or(0)
+                                    } else {
+                                        panic!("Could not find unresolved symbol {name}")
+                                    }
+                                },
                                 Some(x) => (*x as i64 + *addend) as u64,
                             }
                         _ => panic!("Weird data relocation type")
@@ -902,7 +910,9 @@ fn get_instruction_imm_idxs(instruction: &Instruction) -> SmallVec<[(OpKind,usiz
             OpKind::Immediate8to32 |
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
-                ret.push((op, instruction.immediate(i as u32) as usize))
+                let mut tmp_instruction = *instruction;
+                tmp_instruction.set_op_kind(i as u32, OpKind::Immediate32to64);
+                ret.push((op, tmp_instruction.immediate(i as u32) as usize));
             }
             _ => {}
         }
@@ -988,7 +998,7 @@ fn fill_in_imms_phase_2(
             OpKind::Immediate8to32 |
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
-                let imm = &imm_vec[instruction.immediate(i as u32) as usize];
+                let imm = &imm_vec[instruction.immediate32to64() as usize];
                 
                 if let Immediate::Immediate(value) = imm {
                     instruction.set_immediate_u64(i as u32, *value);
@@ -1050,7 +1060,7 @@ fn fill_in_imms_phase_1(instruction: &mut Instruction, imm_vec: &[Immediate], ip
             OpKind::Immediate8to32 |
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
-                let imm = &imm_vec[instruction.immediate(i as u32) as usize];
+                let imm = &imm_vec[instruction.immediate32to64() as usize];
                 if let Immediate::Immediate(value) = imm {
                     instruction.set_immediate_u64(i as u32, *value);
                 }
@@ -1093,7 +1103,7 @@ fn change_imm_size_variable_v2(instruction: &mut Instruction, instruction_idx: u
 }
 
 fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]) {
-    for (i, op) in instruction.op_kinds().enumerate() {
+    for op in instruction.op_kinds() {
         match op {
             OpKind::Memory => {
                 if let Mnemonic::Nop = instruction.mnemonic() {
@@ -1122,7 +1132,7 @@ fn change_imm_size_variable(instruction: &mut Instruction, imm_vec: &[Immediate]
             OpKind::Immediate8to32 |
             OpKind::Immediate8to64 |
             OpKind::Immediate32to64 => {
-                let immediate = &imm_vec[instruction.immediate(i as u32) as usize];
+                let immediate = &imm_vec[instruction.immediate32to64() as usize];
                 match immediate {
                     Immediate::Immediate(value) => {
                         let fits_into_i8  =  i8::try_from(*value as i64).is_ok();
