@@ -917,8 +917,23 @@ impl IL2CppStruct {
         let mut table: HashMap<String, u64> = HashMap::new();
         self.get_enum_stuff(meta, &mut table);
         format_to!(out_str, "struct {} {{\n", self.get_name(meta));
+        
+        self.decode_recursive(meta, out_str, idx, &table, 0);
+        
+        format_to!(out_str, "}}\n\n");
+    }
+    
+    fn decode_recursive(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32, table: &HashMap<String, u64>, recursion: u32) {
+        if recursion < 5 {
+            if let Some(strukt_idx) = self.get_parent_struct_idx(meta).map(|x| x as usize) {
+                let strukt = IL2CppStruct::from_bytes(
+                    &meta.type_definitions.as_slice_of(&meta.metadata)[strukt_idx * STRUCT_STRIDE .. strukt_idx * STRUCT_STRIDE + STRUCT_STRIDE]
+                );
+                strukt.decode_recursive(meta, out_str, strukt_idx as u32, table, recursion + 1);
+            }
+        }
+        
         let my_name = self.get_name(meta);
-        //let mut field_offsets: Vec<(String, u64)> = Vec::with_capacity(self.field_count as usize);
         
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
         if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
@@ -938,15 +953,8 @@ impl IL2CppStruct {
                 } else {
                     format_to!(out_str, "\t{}: {}, //0x{off:X}\n", meta.get_string(field.name_off), typ.name(meta).0);
                 }
-                
-                //if typ.attrs & 0x50 == 0 {
-                //    let name = format!("{prefix}.{}", );
-                //    table.insert(name, off as u64);
-                //}
             }
         }
-        
-        format_to!(out_str, "}}\n\n");
     }
 }
 
@@ -1163,7 +1171,6 @@ impl IL2CppDumper {
             metadata,
             assembly,
         };
-        
         //for image_off in il2cpp.images.as_range().step_by(IMAGE_STRIDE) {
         //    let image = IL2CppImage::from_bytes(&il2cpp.metadata[image_off..image_off+IMAGE_STRIDE]);
         //    //println!("{}", il2cpp.get_string(image.name_off));
