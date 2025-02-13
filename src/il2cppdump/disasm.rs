@@ -344,7 +344,7 @@ impl Method {
         );
         let instructions: Vec<Instruction> = decoder.into_iter().collect();
         
-        let mut label_name    = String::from("\"") + &self.name_short(meta);
+        let mut label_name    = self.name_short(meta);
         let function_name_len = label_name.len();
         
         let (_locs, _loops, calls, _endret) = self.get_locs_loops_calls_endret(&instructions, meta);
