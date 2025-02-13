@@ -47,8 +47,6 @@ plant_get_firerate:
 	mulss Plant.thePlantAttackInterval(%rbx), %xmm6
 	ret
 
-
-
 fetch_firerate:
 	call   plant_type_flatten
 	leaq   plant_firerate_table(%rip), %rcx
