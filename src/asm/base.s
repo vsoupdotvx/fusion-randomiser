@@ -270,6 +270,178 @@ plant_type_flatten_menu: #for ease of use, this function saves all registers exc
 	popq %r8
 	ret
 
+"CardUI::Awake(&mut self)+0x158":
+	call set_text_size
+"ENDCardUI::Awake(&mut self)+0x158":
+
+"CardUI::Awake(&mut self)+0x240":
+	call set_text_size
+"ENDCardUI::Awake(&mut self)+0x240":
+
+set_text_size:
+	pushq %rbp
+	subq  $0x30, %rsp
+	
+	movq %rdx, %rbp
+	call "CardUI::Awake.unknown_callD"
+	
+	cmpq $0, fetch_cooldown_ptr(%rip)
+	sete %al
+	cmpq $0, fetch_firerate_ptr(%rip)
+	sete %ah
+	andb %ah, %al
+	jne  set_text_size.locA
+		movq %rbp, %rcx
+		movb $1,    %dl
+		call "TMPro::TMP_Text::set_enableAutoSizing(&mut self, value: bool)"
+		
+		movq  %rbp, %rcx
+		movss packet_font_size(%rip), %xmm1
+		call  "TMPro::TMP_Text::set_fontSizeMin(&mut self, value: f32)"
+		
+		movq  %rbp, %rcx
+		movss packet_font_size(%rip), %xmm1
+		call  "TMPro::TMP_Text::set_fontSizeMax(&mut self, value: f32)"
+	set_text_size.locA:
+	
+	addq $0x30, %rsp
+	popq %rbp
+	ret
+
+"CardUI::Awake(&mut self)+0x24F":
+	call card_create_label
+"ENDCardUI::Awake(&mut self)+0x24F":
+
+"CardUI::Update(&mut self)+0x108":
+	call card_create_label
+"ENDCardUI::Update(&mut self)+0x108":
+
+card_create_label: #seed packet cost in ecx
+	pushq %rdi
+	pushq %rsi
+	pushq %rbp
+	pushq %rbx
+	pushq %r14
+	pushq %r15
+	subq  $0x48,  %rsp
+	xorl  %r15d, %r15d
+	xorl  %r14d, %r14d
+	movl  (%rcx), %ecx
+	
+	testl %ecx,   %ecx
+	sets  %r15b
+	jns   card_create_label.locA
+		negl %ecx
+	card_create_label.locA:
+	
+	pxor     %xmm2,             %xmm2
+	movaps   const4x10.0(%rip), %xmm0
+	cvtsi2ss %ecx,              %xmm5
+	pshufd   $0,     %xmm5,     %xmm4
+	pshufd   $0,     %xmm5,     %xmm5
+	
+	mulps  card_create_label.constB(%rip), %xmm5
+	mulps  card_create_label.constA(%rip), %xmm4
+	movaps %xmm0, %xmm1
+	cmpq   $1, fetch_cooldown_ptr(%rip)
+	sbbl   $-1,   %r14d
+	
+	roundps $3, %xmm5, %xmm5
+	roundps $3, %xmm4, %xmm4
+	mulps   %xmm5,     %xmm0
+	mulps   %xmm4,     %xmm1
+	cmpq    $1, fetch_firerate_ptr(%rip)
+	sbbl    $-1,       %r14d
+	
+	palignr $12, %xmm0, %xmm1
+	palignr $12, %xmm2, %xmm0
+	subps   %xmm0,      %xmm5
+	subps   %xmm2,      %xmm4
+	
+	cvtps2dq %xmm5, %xmm5
+	cvtps2dq %xmm4, %xmm4
+	
+	packssdw %xmm5, %xmm4
+	
+	pcmpeqw  %xmm4,         %xmm2
+	pmovmskb %xmm2,          %esi
+	xorl     $0xFFFF,        %esi
+	orl      $0xC000,        %esi
+	bsfl     %esi,           %esi
+	negl     %esi
+	addl     $16,            %esi
+	leal     (%esi,%r15d,2), %ecx
+	leal     (%ecx,%r14d,8), %ecx
+	shrl     $1,             %ecx
+	
+	paddw  const8x0x30(%rip), %xmm4
+	movdqu %xmm4, 0x20(%rsp)
+	
+	xorl %edx, %edx
+	call "System::String::FastAllocateString(length: i32) -> String"
+	movq %rax, %rbp
+	xorl %ecx, %ecx
+	call "System.Runtime.CompilerServices::RuntimeHelpers::get_OffsetToStringData() -> i32"
+	
+	movslq %eax,    %r8
+	testl  %r15d, %r15d
+	addq   %r8,    %rbp
+	je    card_create_label.locB
+	    movw $0x002D, (%rbp,%r14,8)
+	card_create_label.locB:
+	
+	movq  fetch_firerate_ptr(%rip), %r9
+	testq %r9, %r9
+	je    card_create_label.locC
+		movq  $0x0020002000200020, %rax
+		movq  %rax, (%rbp)
+		movslq CardUI.theSeedType(%rbx), %rcx
+		cmpl   $1160, %ecx
+		ja     card_create_label.locC
+			call  *%r9 #doesn't affect %r8
+			imull $9,   %eax,    %eax
+			shrl  $8,            %eax
+			leaq  indicator_lut(%rip), %rcx
+			movq  (%rcx,%rax,8), %rcx
+			movq  %rcx,        (%rbp)
+	card_create_label.locC:
+	
+	movq  fetch_cooldown_ptr(%rip), %r9
+	testq %r9, %r9
+	je    card_create_label.locD
+		movq   $0x0020002000200020, %rax
+		movq   %rax, -8(%rbp,%r14,8)
+		movslq CardUI.theSeedType(%rbx), %rcx
+		call   *%r9 #doesn't affect %r8
+		testl  %eax, %eax
+		js     card_create_label.locD
+			imull $9,   %eax,      %eax
+			shrl  $8,              %eax
+			leaq  indicator_lut(%rip), %rcx
+			movq  (%rcx,%rax,8),   %rcx
+			movq  %rcx, -8(%rbp,%r14,8)
+	card_create_label.locD:
+	
+	movl %esi,          %ecx
+	leaq 0x30(%rsp),    %rsi
+	leaq (%rbp,%r15,2), %rdi
+	leaq (%rdi,%r14,8), %rdi
+	subq %rcx,          %rsi
+	shrl $1,            %ecx
+	
+	rep movsw #slower than rep movsb on fast small rep movsb systems
+	
+	addq $0x48,       %rsp
+	movq %rbp,        %rax
+	subq %r8,         %rax
+	popq %r15
+	popq %r14
+	popq %rbx
+	popq %rbp
+	popq %rsi
+	popq %rdi
+	ret
+
 wait_on_rust:
 	movb $1, stopped(%rip)
 	wait_on_rust.locA:
@@ -294,6 +466,10 @@ store_mix_data_ptr:
 	ret
 
 .section .data
+fetch_cooldown_ptr:
+	.quad "OR_NULL fetch_cooldown"
+fetch_firerate_ptr:
+	.quad "OR_NULL fetch_firerate"
 game_app_ptr:
 	.quad 0
 mix_data_ptr:
@@ -356,6 +532,8 @@ menu_init_array:
 	.long "PlantType::Wheat";         .long 46
 	.long "PlantType::BigWallNut";    .long 47
 
+packet_font_size:
+	.float 15.0
 menu_table:
 	.space 0x40 * 4
 menu_array:

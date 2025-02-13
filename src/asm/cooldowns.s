@@ -31,6 +31,15 @@ store_cooldown:
 	popq  %rax
 	ret
 
+fetch_cooldown:
+	call   plant_type_flatten_menu
+	testq  %rax, %rax
+	js     fetch_cooldown.locA
+		leaq   plant_cd_table(%rip), %rcx
+		movzbl (%rcx,%rax),       %eax
+	fetch_cooldown.locA:
+	ret
+
 .section .data
 const1.0:
 	.float 1.0
