@@ -353,8 +353,8 @@ card_create_label: #seed packet cost in ecx
 	cmpq    $1, fetch_firerate_ptr(%rip)
 	sbbl    $-1,       %r14d
 	
-	palignr $12, %xmm0, %xmm1
-	palignr $12, %xmm2, %xmm0
+	palignr $12, %xmm1, %xmm0
+	palignr $12, %xmm2, %xmm1
 	subps   %xmm0,      %xmm5
 	subps   %xmm2,      %xmm4
 	

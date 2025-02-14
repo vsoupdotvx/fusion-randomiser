@@ -179,8 +179,8 @@ int_2_string_fast:
 	mulps   %xmm5,     %xmm0
 	mulps   %xmm4,     %xmm1
 	
-	palignr $12, %xmm0, %xmm1
-	palignr $12, %xmm2, %xmm0
+	palignr $12, %xmm1, %xmm0
+	palignr $12, %xmm2, %xmm1
 	subps   %xmm0,      %xmm5
 	subps   %xmm2,      %xmm4
 	
