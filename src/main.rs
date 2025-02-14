@@ -59,6 +59,7 @@ fn main() {
     println!("Seed: \"{seed_string}\"");
     
     let base_patch      = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/base.o")));
+    let tutorials_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/tutorials.o")));
     let firerates_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/firerates.o")));
     let cost_patch      = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/cost.o")));
     let cooldowns_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/cooldowns.o")));
@@ -94,6 +95,7 @@ fn main() {
     init_defaults_from_dump(&dumper);
     let sym_tab = Patch::apply_patches(&[
         base_patch.unwrap(),
+        tutorials_patch.unwrap(),
         firerates_patch.unwrap(),
         cost_patch.unwrap(),
         cooldowns_patch.unwrap(),

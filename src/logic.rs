@@ -241,11 +241,11 @@ impl RandomisationData {
         let mut ret = vec![0u8; 45];
         let mut level_vec = Vec::with_capacity(45);
         
-        level_vec.push((1, 0));
-        
-        for i in 2..46 {
+        for i in 1..46 {
             level_vec.push((i, rng.next_u32()));
         }
+        
+        level_vec[1-1].1  = 0;
         
         level_vec.sort_by_key(|(_idx, val)| *val);
         
