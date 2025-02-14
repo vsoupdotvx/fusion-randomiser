@@ -173,6 +173,7 @@ impl RandomisationData {
                 *byte = *rbyte;
             }
         }
+        ret[1] = u8::min(ret[1], 128);
         
         ret
     }
