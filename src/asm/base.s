@@ -442,13 +442,13 @@ card_create_label: #seed packet cost in ecx
 	popq %rdi
 	ret
 
-"StartGameBtn::OnMouseUp(&mut self)+0xF8":
+"InitBoard::ReadySetPlant(&mut self)":
 	call exit_seed_select
-	.nops 3
-"ENDStartGameBtn::OnMouseUp(&mut self)+0xF8":
+"ENDInitBoard::ReadySetPlant(&mut self)":
 
 exit_seed_select:
 	movb $0, on_seed_select(%rip)
+	movq %rbx, 0x10(%rsp)
 	ret
 
 wait_on_rust:
