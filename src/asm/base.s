@@ -442,6 +442,15 @@ card_create_label: #seed packet cost in ecx
 	popq %rdi
 	ret
 
+"StartGameBtn::OnMouseUp(&mut self)+0xF8":
+	call exit_seed_select
+	.nops 3
+"ENDStartGameBtn::OnMouseUp(&mut self)+0xF8":
+
+exit_seed_select:
+	movb $0, on_seed_select(%rip)
+	ret
+
 wait_on_rust:
 	movb $1, stopped(%rip)
 	wait_on_rust.locA:
@@ -458,6 +467,7 @@ rerandomise:
 		call "MixData::InitMixData()"
 	rerandomise.locA:
 	call wait_on_rust
+	movb $1, on_seed_select(%rip)
 	ret
 
 store_mix_data_ptr:
@@ -545,5 +555,7 @@ plant_lut:
 menu_table_initialized:
 	.byte 0
 stopped:
+	.byte 0
+on_seed_select:
 	.byte 0
 
