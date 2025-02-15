@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, path::{Path, PathBuf}};
+use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::{fs::{read_dir, OpenOptions, canonicalize, read_to_string}, io::IoSliceMut, os::unix::net::UnixStream, pipe::{PipeReader, PipeWriter}};
 use object::{Object, ObjectSection};
@@ -33,11 +33,7 @@ use windows::{
                 GetModuleInformation,
                 MODULEINFO,
             },
-            Threading::{
-                OpenProcess,
-                PROCESS_QUERY_INFORMATION,
-                PROCESS_VM_OPERATION,
-            },
+            Threading::OpenProcess,
             WindowsProgramming::SYSTEM_PROCESS_INFORMATION,
         },
     },
@@ -126,6 +122,8 @@ impl FusionProcess {
     #[cfg(target_os = "windows")]
     fn find_process_windows() -> Result<Self, Box<dyn std::error::Error>> {
         use std::ptr::slice_from_raw_parts;
+
+        use windows::Win32::{Foundation::MAX_PATH, System::Threading::PROCESS_ALL_ACCESS};
         
         let mut buf_size = 0u32;
         let mut buf: Vec<u8>;
@@ -135,7 +133,7 @@ impl FusionProcess {
             unsafe {
                 if NtQuerySystemInformation(
                     SystemProcessInformation,
-                    if buf.len() == 0 {
+                    if buf.is_empty() {
                         ptr::null_mut()
                     } else {
                         &mut buf[0] as *mut u8 as *mut c_void
@@ -147,13 +145,13 @@ impl FusionProcess {
         }
         
         let mut pointer = ptr::addr_of!(buf[0]);
-        let (fusion_pid, files_dir) = loop {
+        let fusion_pid = loop {
             let info = unsafe { &*(pointer as *const SYSTEM_PROCESS_INFORMATION) };
             
-            let name = String::from_utf16_lossy(unsafe { &*slice_from_raw_parts(info.ImageName.Buffer.0, info.ImageName.Length as usize) });
+            let name = String::from_utf16_lossy(unsafe { &*slice_from_raw_parts(info.ImageName.Buffer.0, (info.ImageName.Length / 2) as usize) });
             
             if name.ends_with("PlantsVsZombiesRH.exe") {
-                break (info.UniqueProcessId, Path::new(&name).parent().unwrap().to_path_buf())
+                break info.UniqueProcessId
             }
             
             if info.NextEntryOffset == 0 {
@@ -164,7 +162,7 @@ impl FusionProcess {
         
         let fusion_handle = match unsafe {
             OpenProcess(
-                PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION,
+                PROCESS_ALL_ACCESS,
                 false,
                 fusion_pid.0 as usize as u32,
             )
@@ -173,26 +171,43 @@ impl FusionProcess {
             Err(err) => return Err(Box::new(CommonError::critical(&format!("Error opening process: {err}")))),
         };
         
-        buf_size = 0;
+
+
+
+        
+        let mut buf_size = 0;
+        let mut last_buf_size = 0;
         let mut module_handles: Vec<HMODULE>;
         
         loop { //loop to prevent race conditions
             module_handles = vec![HMODULE::default(); buf_size as usize / size_of::<HMODULE>()];
             unsafe {
-                if EnumProcessModules(
+                let lphmodule = if module_handles.is_empty() {
+                    ptr::null_mut()
+                } else {
+                    &mut module_handles[0] as *mut HMODULE
+                };
+                match EnumProcessModules(
                     fusion_handle,
-                    if module_handles.len() == 0 {
-                        ptr::null_mut()
-                    } else {
-                        &mut module_handles[0] as *mut HMODULE
-                    },
+                    lphmodule,
                     buf_size,
                     &mut buf_size as *mut u32,
-                ).is_ok() {break;}
+                ) {
+                    Ok(()) if buf_size == last_buf_size => break,
+                    Ok(()) => last_buf_size = buf_size,
+                    Err(e) => eprintln!("{e}"),
+                }
             }
         }
+
+        let files_dir = unsafe {
+            let mut files_dir_buf = [0u16; MAX_PATH as usize];
+            let files_dir_len = GetModuleFileNameExW(Some(fusion_handle), None, &mut files_dir_buf) as usize;
+            let files_dir_str = String::from_utf16_lossy(&files_dir_buf[0..files_dir_len]);
+            PathBuf::from(files_dir_str).parent().unwrap().to_path_buf()
+        };
         
-        let mut name_buf = [0u16; 2048];
+        let mut name_buf = [0u16; MAX_PATH as usize];
         let mut game_assembly_dll_path = files_dir.clone();
         game_assembly_dll_path.push("GameAssembly.dll");
         let game_assembly_dll_path = game_assembly_dll_path.to_string_lossy().to_string();
@@ -228,9 +243,7 @@ impl FusionProcess {
         
         let dll_offset = module_info.lpBaseOfDll as usize as u64;
         
-        let mut dll_file = File::open(files_dir.clone().join("GameAssembly.dll"))?;
-        let mut dll_data = vec![0; dll_file.metadata()?.len() as usize];
-        dll_file.read(&mut dll_data)?;
+        let dll_data = std::fs::read(files_dir.clone().join("GameAssembly.dll"))?;
         let dll_data = dll_data.into_boxed_slice();
         let dll_obj = object::File::parse(&*dll_data)?;
         let dll_text_end = dll_obj.section_by_name(".rdata").unwrap().address() - dll_obj.relative_address_base() + dll_offset;
@@ -249,10 +262,13 @@ impl FusionProcess {
             if retval == 0 {
                 break;
             }
+            println!("addr: 0x{addr:x}");
+            println!("state: {:?}", lp_buffer.State);
             if lp_buffer.State != MEM_FREE {
-                map_ranges.push((lp_buffer.AllocationBase as usize as u64, lp_buffer.AllocationBase as usize as u64 + lp_buffer.RegionSize as u64));
+                let range_start = lp_buffer.BaseAddress as u64;
+                map_ranges.push((range_start, range_start + lp_buffer.RegionSize as u64));
             }
-            addr = lp_buffer.AllocationBase as usize + lp_buffer.RegionSize;
+            addr += lp_buffer.RegionSize;
         }
         
         let start_idx = map_ranges.partition_point(|(_s, e)| {*e < dll_text_end - i32::MAX as u64});
@@ -267,7 +283,9 @@ impl FusionProcess {
                 break;
             }
         }
-        
+
+        println!("asm: 0x{asm_offset:x}, dll: 0x{dll_offset:x}");
+
         Ok(Self {
             fusion_handle,
             files_dir,
