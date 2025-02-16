@@ -15,7 +15,9 @@ pub struct ZombieData {
     pub id_name:        &'static str,
     pub allowed_lanes:  ZombieLanes,
     pub default_weight: u32,
+    default_points:     u32,
     pub id:             Option<i32>,
+    pub is_elite:       bool,
     pub is_odyssey:     bool,
 }
 
@@ -40,7 +42,9 @@ impl Default for ZombieData {
             id_name: "",
             allowed_lanes: ZombieLanes::Land,
             default_weight: 0,
+            default_points: 1,
             id: None,
+            is_elite: false,
             is_odyssey: false,
         }
     }
@@ -590,361 +594,441 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //0
             id_name: "ZombieType::NormalZombie",
             default_weight: 4000, //weights painfully taken from InitZombieList::.cctor
+            default_points: 1, //wavepoints slightly less painfully taken from jump tables in InitZombieList::AddZombieToList
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //2
             id_name: "ZombieType::ConeZombie",
             default_weight: 3000,
+            default_points: 2,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //3
             id_name: "ZombieType::PolevaulterZombie",
             default_weight: 3000,
+            default_points: 2,
             ..ZombieData::default()
         },
         ZombieData { //4
             id_name: "ZombieType::BucketZombie",
             default_weight: 2000,
+            default_points: 4,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //5
             id_name: "ZombieType::PaperZombie",
             default_weight: 3000,
+            default_points: 2,
             ..ZombieData::default()
         },
         ZombieData { //6
             id_name: "ZombieType::DancePolZombie",
             default_weight: 750,
+            default_points: 6,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //7
             id_name: "ZombieType::DancePolZombie2",
             default_weight: 0,
+            default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //8
             id_name: "ZombieType::DoorZombie",
             default_weight: 2000,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //9
             id_name: "ZombieType::FootballZombie",
             default_weight: 1500,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //A
             id_name: "ZombieType::JacksonZombie",
             default_weight: 500,
+            default_points: 10,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //B
             id_name: "ZombieType::ZombieDuck",
             default_weight: 0,
+            default_points: 1,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //C
             id_name: "ZombieType::ConeZombieDuck",
             default_weight: 0,
+            default_points: 1,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //D
             id_name: "ZombieType::BucketZombieDuck",
             default_weight: 0,
+            default_points: 1,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //E
             id_name: "ZombieType::SubmarineZombie",
             default_weight: 750,
+            default_points: 7,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //F
             id_name: "ZombieType::ElitePaperZombie",
             default_weight: 750,
+            default_points: 6,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //10
             id_name: "ZombieType::DriverZombie",
             default_weight: 1000,
+            default_points: 7,
             ..ZombieData::default()
         },
         ZombieData { //11
             id_name: "ZombieType::SnorkleZombie",
             default_weight: 1500,
+            default_points: 3,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //12
             id_name: "ZombieType::SuperDriver",
             default_weight: 750,
+            default_points: 7,
             ..ZombieData::default()
         },
         ZombieData { //13
             id_name: "ZombieType::Dolphinrider",
             default_weight: 1500,
+            default_points: 3,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //14
             id_name: "ZombieType::DrownZombie",
             default_weight: 1500,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //15
             id_name: "ZombieType::DollDiamond",
             default_weight: 750,
+            default_points: 6,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //16
             id_name: "ZombieType::DollGold",
             default_weight: 750,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //17
             id_name: "ZombieType::DollSilver",
             default_weight: 750,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //18
             id_name: "ZombieType::JackboxZombie",
             default_weight: 1500,
+            default_points: 3,
             ..ZombieData::default()
         },
         ZombieData { //19
             id_name: "ZombieType::BalloonZombie",
             default_weight: 1500,
+            default_points: 2,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //1A
             id_name: "ZombieType::KirovZombie",
             default_weight: 750,
+            default_points: 7,
+            is_elite: true,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //1B
             id_name: "ZombieType::SnowDolphinrider",
             default_weight: 1000,
+            default_points: 4,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //1C
             id_name: "ZombieType::MinerZombie",
             default_weight: 1500,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //1D
             id_name: "ZombieType::IronBallonZombie",
             default_weight: 1000,
+            default_points: 5,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //1E
             id_name: "ZombieType::SuperJackboxZombie",
             default_weight: 1000,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //1F
             id_name: "ZombieType::CatapultZombie",
             default_weight: 1000,
+            default_points: 7,
             ..ZombieData::default()
         },
         ZombieData { //20
             id_name: "ZombieType::PogoZombie",
             default_weight: 1500,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //21
             id_name: "ZombieType::LadderZombie",
             default_weight: 1500,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //22
             id_name: "ZombieType::SuperPogoZombie",
             default_weight: 1000,
+            default_points: 6,
             ..ZombieData::default()
         },
         ZombieData { //23
             id_name: "ZombieType::Gargantuar",
             default_weight: 750,
+            default_points: 8,
             ..ZombieData::default()
         },
         ZombieData { //24
             id_name: "ZombieType::RedGargantuar",
             default_weight: 500,
+            default_points: 8,
             is_odyssey: true,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //25
             id_name: "ZombieType::ImpZombie",
             default_weight: 0,
+            default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //26
             id_name: "ZombieType::IronGargantuar",
             default_weight: 750,
+            default_points: 8,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //27
             id_name: "ZombieType::IronRedGargantuar",
             default_weight: 500,
+            default_points: 8,
+            is_elite: true,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //28
             id_name: "ZombieType::MachineNutZombie",
             default_weight: 750,
+            default_points: 8,
             ..ZombieData::default()
         },
         ZombieData { //29
             id_name: "ZombieType::SilverZombie",
             default_weight: 0,
+            default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2A
             id_name: "ZombieType::GoldZombie",
             default_weight: 0,
+            default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2B
             id_name: "ZombieType::SuperGargantuar",
             default_weight: 500,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //2C
             id_name: "ZombieType::ZombieBoss",
             default_weight: 0,
+            default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2D
             id_name: "ZombieType::BungiZombie", //can go on water and land, but we don't want this for logic purposes
             default_weight: 1000,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //2E
             id_name: "ZombieType::ZombieBoss2",
             default_weight: 0,
+            default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2F
             id_name: "ZombieType::SnowZombie",
             default_weight: 750,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //30
             id_name: "ZombieType::NewYearZombie",
             default_weight: 750,
+            default_points: 8,
             ..ZombieData::default()
         },
         ZombieData { //64
             id_name: "ZombieType::PeaShooterZombie",
             default_weight: 1000,
+            default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //65
             id_name: "ZombieType::CherryShooterZombie",
             default_weight: 750,
+            default_points: 3,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //66
             id_name: "ZombieType::SuperCherryShooterZombie",
             default_weight: 750,
+            default_points: 4,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //67
             id_name: "ZombieType::WallNutZombie",
             default_weight: 2000,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //68
             id_name: "ZombieType::CherryPaperZombie",
             default_weight: 500,
+            default_points: 8,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //69
             id_name: "ZombieType::RandomZombie",
             default_weight: 1000,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //6A
             id_name: "ZombieType::BucketNutZombie",
             default_weight: 1000,
+            default_points: 5,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //6B
             id_name: "ZombieType::CherryNutZombie",
             default_weight: 2000,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //6C
             id_name: "ZombieType::IronPeaZombie",
             default_weight: 500,
+            default_points: 5,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //6D
             id_name: "ZombieType::TallNutFootballZombie",
             default_weight: 1000,
+            default_points: 10,
+            is_elite: true,
             ..ZombieData::default()
         },
         ZombieData { //6E
             id_name: "ZombieType::RandomPlusZombie",
             default_weight: 500,
+            default_points: 7,
             ..ZombieData::default()
         },
         ZombieData { //6F
             id_name: "ZombieType::TallIceNutZombie",
             default_weight: 1000,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //70
             id_name: "ZombieType::CherryCatapultZombie",
             default_weight: 750,
+            default_points: 10,
             ..ZombieData::default()
         },
         ZombieData { //71
             id_name: "ZombieType::DolphinPeaZombie",
             default_weight: 750,
+            default_points: 4,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
         ZombieData { //72
             id_name: "ZombieType::IronPeaDoorZombie",
             default_weight: 500,
+            default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //73
             id_name: "ZombieType::SquashZombie",
             default_weight: 750,
+            default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //74
             id_name: "ZombieType::JalaSquashZombie",
             default_weight: 500,
+            default_points: 8,
             ..ZombieData::default()
         },
         ZombieData { //75
             id_name: "ZombieType::JalapenoZombie",
             default_weight: 0,
+            default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //76
             id_name: "ZombieType::GatlingFootballZombie",
             default_weight: 750,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //C8
             id_name: "ZombieType::SuperSubmarine",
             default_weight: 1000,
+            default_points: 5,
             allowed_lanes: ZombieLanes::Water,
             is_odyssey: true,
             ..ZombieData::default()
@@ -952,30 +1036,35 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //C9
             id_name: "ZombieType::JacksonDriver",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //CA
             id_name: "ZombieType::FootballDrown",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //CB
             id_name: "ZombieType::CherryPaperZ95",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //CC
             id_name: "ZombieType::BlackFootball",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //CD
             id_name: "ZombieType::SuperKirov",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
@@ -983,54 +1072,63 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //CE
             id_name: "ZombieType::SuperBombThrower",
             default_weight: 0,
+            default_points: 1,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //CF
             id_name: "ZombieType::QuickJacksonZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D0
             id_name: "ZombieType::QingZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D1
             id_name: "ZombieType::JackboxJumpZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D2
             id_name: "ZombieType::SuperMachineNutZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D3
             id_name: "ZombieType::LandSubmarine",
             default_weight: 0,
+            default_points: 1,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D4
             id_name: "ZombieType::UltimateGargantuar",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D5
             id_name: "ZombieType::ObsidianImpZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D6
             id_name: "ZombieType::DolphinGatlingZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
@@ -1038,42 +1136,49 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //D7
             id_name: "ZombieType::DiamondRandomZombie",
             default_weight: 300,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D8
             id_name: "ZombieType::DrownpultZombie",
             default_weight: 1000,
+            default_points: 5,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //D9
             id_name: "ZombieType::SuperDancePolZombie",
             default_weight: 0,
+            default_points: 1,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //DA
             id_name: "ZombieType::UltimateFootballDrown",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //DB
             id_name: "ZombieType::UltimateMachineNutZombie",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //DC
             id_name: "ZombieType::UltimateFootballZombie",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //DD
             id_name: "ZombieType::UltimateKirovZombie",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
@@ -1081,12 +1186,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //DE
             id_name: "ZombieType::UltimateJacksonDriver",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //DF
             id_name: "ZombieType::UltimatePaperZombie",
             default_weight: 0,
+            default_points: 10,
             is_odyssey: true,
             ..ZombieData::default()
         },
