@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
-use std::{fs::{read_dir, OpenOptions, canonicalize, read_to_string}, io::IoSliceMut, os::unix::net::UnixStream, pipe::{PipeReader, PipeWriter}};
+use std::{fs::{canonicalize, File, OpenOptions, read_dir, read_to_string}, io::{Read, IoSliceMut}, os::unix::net::UnixStream, path::Path, pipe::{PipeReader, PipeWriter}};
 use object::{Object, ObjectSection};
 #[cfg(target_os = "windows")]
 use windows::{
