@@ -1,5 +1,5 @@
-use std::{collections::HashMap, io::Write, num::NonZeroU64, ops::Range};
-
+use std::{collections::HashMap, hash::BuildHasherDefault, io::Write, num::NonZeroU64, ops::Range};
+use fxhash::FxHashMap;
 use iced_x86::{Code, Decoder, DecoderOptions, Encoder, Formatter, GasFormatter, Instruction, Mnemonic, OpKind};
 use object::{File, Object, ObjectSection, ObjectSymbol, Relocation, RelocationKind, RelocationTarget, Section, SectionKind, Symbol, SymbolKind};
 use smallvec::SmallVec;
@@ -8,14 +8,14 @@ use crate::{process::{FusionProcess, PAGE_EXECUTE_READWRITE}, util::CommonError}
 
 use super::il2cppdump::IL2CppDumper;
 struct TextSection {
-    _idx:                       usize,
-    instructions:   Vec<Instruction>,
-    relocs: HashMap<u64, Relocation>,
+    _idx:                        usize,
+    instructions:     Vec<Instruction>,
+    relocs: FxHashMap<u64, Relocation>,
 }
 
 struct DataSection {
-    _idx:    usize,
-    relocs: HashMap<u64, Relocation>,
+    _idx:   usize,
+    relocs: FxHashMap<u64, Relocation>,
     range:  Range<usize>,
 }
 #[allow(dead_code)]
@@ -27,7 +27,7 @@ pub struct Patch {
     imm_vec:      Vec<Immediate>,
     data:         Option<Vec<u8>>,
     data_relocs:  Vec<DataReloc>,
-    patch_syms:   HashMap<String, PatchSymbolLocation>,
+    patch_syms:   FxHashMap<String, PatchSymbolLocation>,
 }
 impl Patch {
     pub fn new(obj: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
@@ -77,11 +77,11 @@ impl Patch {
         for (i, sym) in sym_array.iter_mut() {
             *i = sym.index().0;
         }
-        let symbols: HashMap<usize, Symbol> = sym_array.into_iter().collect();
+        let symbols: FxHashMap<usize, Symbol> = sym_array.into_iter().collect();
         
         let mut imm_vec: Vec<Immediate> = Vec::with_capacity(256);
         let mut rev_imm_lookup: SmallVec<[usize;256]> = SmallVec::new();
-        let mut branch_target_table: HashMap<u64, usize> = HashMap::with_capacity(text_section.instructions.len());
+        let mut branch_target_table: FxHashMap<u64, usize> = HashMap::with_capacity_and_hasher(text_section.instructions.len(), BuildHasherDefault::default());
         
         for (i, instruction) in text_section.instructions.iter().enumerate() {
             branch_target_table.insert(instruction.ip(), i);
@@ -259,7 +259,7 @@ impl Patch {
         
         sym_names.sort_unstable_by_key(|(_name, addr)| *addr);
         
-        let mut patch_syms: HashMap<String, PatchSymbolLocation> = HashMap::with_capacity(256);
+        let mut patch_syms: FxHashMap<String, PatchSymbolLocation> = HashMap::with_capacity_and_hasher(256, BuildHasherDefault::default());
         
         for sym in symbols.values() {
             if let Ok(name) = sym.name() {
@@ -356,10 +356,10 @@ impl Patch {
         })
     }
     
-    pub fn apply_patches(patches: &[Patch], meta: &IL2CppDumper, fusion: &mut FusionProcess) -> HashMap<String, u64> {
+    pub fn apply_patches(patches: &[Patch], meta: &IL2CppDumper, fusion: &mut FusionProcess) -> FxHashMap<String, u64> {
         let mut patches: Vec<Patch> = patches.to_vec();
         
-        let mut il2cpp_syms: HashMap<String, u64> = HashMap::with_capacity(meta.methods_array.len()*3);
+        let mut il2cpp_syms: FxHashMap<String, u64> = HashMap::with_capacity_and_hasher(meta.methods_array.len()*3, BuildHasherDefault::default());
         
         for method in &meta.methods_array {
             if method.addr == 0 {
@@ -573,7 +573,7 @@ impl Patch {
         //I was having some difficulty with the second mapping, so I'm beind lazy and doing one RWX mapping
         fusion.allocate_memory(fusion.asm_offset, data_section_size + text_section_size, PAGE_EXECUTE_READWRITE);
         
-        //let mut sym_tab: HashMap<String,u64> = HashMap::new();
+        //let mut sym_tab: FxHashMap<String,u64> = HashMap::default();
         
         for (patch_idx, patch) in patches.iter().enumerate() {
             for (sym_name, sym_location) in &patch.patch_syms {
@@ -926,10 +926,10 @@ fn fill_in_imms_phase_2(
     imm_vec: &[Immediate],
     offsets: &[u32],
     text_section_off: u64,
-    sym_tab: &HashMap<String,u64>,
+    sym_tab: &FxHashMap<String,u64>,
     patch_offs: Option<&[u32]>,
     patch_addr: Option<NonZeroU64>,
-    local_sym_tab: Option<&HashMap<String,u64>>,
+    local_sym_tab: Option<&FxHashMap<String,u64>>,
 ) {
     for (i, op) in instruction.op_kinds().enumerate() {
         match op {
@@ -1483,8 +1483,8 @@ fn get_instruction_imm_and_memory_offsets_2(instruction: &Instruction) -> (u64, 
 
 fn reloc_to_immediate(
     reloc: &Relocation,
-    symbols: &HashMap<usize, Symbol>,
-    branch_target_table: &HashMap<u64, usize>,
+    symbols: &FxHashMap<usize, Symbol>,
+    branch_target_table: &FxHashMap<u64, usize>,
     sections: &[Section],
     implicit_addend: i64,
     is_call: bool,

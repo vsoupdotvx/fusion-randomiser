@@ -1,6 +1,6 @@
 use core::str;
-use std::{arch::x86_64::{__m128i, _mm_and_si128, _mm_loadl_epi64, _mm_set1_epi8, _mm_setr_epi8, _mm_shuffle_epi8, _mm_srli_epi64, _mm_storeu_si128, _mm_unpacklo_epi8}, cmp::{max, min}, collections::HashMap};
-
+use std::{arch::x86_64::{__m128i, _mm_and_si128, _mm_loadl_epi64, _mm_set1_epi8, _mm_setr_epi8, _mm_shuffle_epi8, _mm_srli_epi64, _mm_storeu_si128, _mm_unpacklo_epi8}, cmp::{max, min}, collections::HashMap, hash::BuildHasherDefault};
+use fxhash::FxHashMap;
 use iced_x86::{CC_ae, CC_b, CC_be, CC_np, CC_p, Code, Decoder, DecoderOptions, FlowControl, Formatter, GasFormatter, Instruction, Mnemonic, OpKind, Register, SymbolResolver, SymbolResult};
 //use smallvec::SmallVec;
 
@@ -260,10 +260,10 @@ impl Method {
     }
     
     #[allow(clippy::type_complexity)]
-    pub fn get_locs_loops_calls_endret(&self, instructions: &[Instruction], meta: &IL2CppDumper) -> (HashMap<u64, usize>, HashMap<u64, usize>, HashMap<u64, usize>, usize) {
-        let mut locs:          HashMap<u64, usize> = HashMap::with_capacity(32);
-        let mut loops:         HashMap<u64, usize> = HashMap::with_capacity(32);
-        let mut unknown_calls: HashMap<u64, usize> = HashMap::with_capacity(32);
+    pub fn get_locs_loops_calls_endret(&self, instructions: &[Instruction], meta: &IL2CppDumper) -> (FxHashMap<u64, usize>, FxHashMap<u64, usize>, FxHashMap<u64, usize>, usize) {
+        let mut locs:          FxHashMap<u64, usize> = HashMap::with_capacity_and_hasher(32, BuildHasherDefault::default());
+        let mut loops:         FxHashMap<u64, usize> = HashMap::with_capacity_and_hasher(32, BuildHasherDefault::default());
+        let mut unknown_calls: FxHashMap<u64, usize> = HashMap::with_capacity_and_hasher(32, BuildHasherDefault::default());
         
         let mut last_ret_idx = None;
         let mut last_loc_ip  = 0u64;
@@ -304,8 +304,8 @@ impl Method {
         (locs, loops, unknown_calls, last_ret_idx.unwrap_or(max(instructions.len(),1)-1))
     }
     
-    pub fn get_local_syms(&self, off: i64, meta: &IL2CppDumper) -> HashMap<String, u64> {
-        let mut ret   = HashMap::with_capacity(48);
+    pub fn get_local_syms(&self, off: i64, meta: &IL2CppDumper) -> FxHashMap<String, u64> {
+        let mut ret   = HashMap::with_capacity_and_hasher(48, BuildHasherDefault::default());
         let start_off = meta.pe.map_v2p(self.addr).unwrap();
         let decoder   = Decoder::with_ip(
             64,
@@ -334,7 +334,7 @@ impl Method {
         ret
     }
     
-    pub fn get_calls(&self, meta: &IL2CppDumper, off: i64, table: &mut HashMap<String, u64>) {
+    pub fn get_calls(&self, meta: &IL2CppDumper, off: i64, table: &mut FxHashMap<String, u64>) {
         let start_off = meta.pe.map_v2p(self.addr).unwrap();
         let decoder   = Decoder::with_ip(
             64,
@@ -357,9 +357,9 @@ impl Method {
 }
 
 struct RegData {
-    gprs:   [Option<u32>;16],
-    stack: HashMap<i32, u32>,
-    sp:                  i32
+    gprs:     [Option<u32>;16],
+    stack: FxHashMap<i32, u32>,
+    sp:                     i32
 }
 impl RegData {
     fn from_method(method: &Method, meta: &IL2CppDumper) -> Self {
@@ -367,7 +367,7 @@ impl RegData {
         
         let mut ret = Self {
             gprs:  [None; 16],
-            stack: HashMap::with_capacity(32),
+            stack: HashMap::with_capacity_and_hasher(32, BuildHasherDefault::default()),
             sp:    0,
         };
         
@@ -526,16 +526,16 @@ impl RegData {
     }
 }
 struct DecodeSymbolResolver {
-    locs:          HashMap<u64, usize>,
-    loops:         HashMap<u64, usize>,
-    unknown_calls: HashMap<u64, usize>,
-    label_name:                 String,
-    function_name_len:           usize,
-    meta:          *const IL2CppDumper,
-    reg_data:             *mut RegData,
+    locs:          FxHashMap<u64, usize>,
+    loops:         FxHashMap<u64, usize>,
+    unknown_calls: FxHashMap<u64, usize>,
+    label_name:                   String,
+    function_name_len:             usize,
+    meta:            *const IL2CppDumper,
+    reg_data:               *mut RegData,
 }
 impl DecodeSymbolResolver {
-    fn new(locs: HashMap<u64, usize>, loops: HashMap<u64, usize>, unknown_calls: HashMap<u64, usize>, meta: &IL2CppDumper,
+    fn new(locs: FxHashMap<u64, usize>, loops: FxHashMap<u64, usize>, unknown_calls: FxHashMap<u64, usize>, meta: &IL2CppDumper,
         label_name: String, function_name_len: usize, reg_data: &mut RegData) -> Self {
         Self {
             locs,

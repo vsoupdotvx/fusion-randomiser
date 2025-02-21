@@ -7,12 +7,14 @@ use core::mem::size_of;
 use core::mem::transmute;
 use std::cmp::max;
 use std::fs::OpenOptions;
+use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::thread::available_parallelism;
+use fxhash::FxHashMap;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::num::NonZero;
@@ -61,9 +63,9 @@ pub struct IL2CppDumper {
     
     //strings_array:   Vec<*const CStr>,
     pub methods_array:               Vec<Method>,
-    pub methods_table:       HashMap<String,u32>,
-    pub method_addr_table:      HashMap<u64,u32>,
-    field_default_lookup:       HashMap<i32,u32>,
+    pub methods_table:     FxHashMap<String,u32>,
+    pub method_addr_table:    FxHashMap<u64,u32>,
+    field_default_lookup:     FxHashMap<i32,u32>,
     icgm_array:                        Vec<Icgm>,
     types_array:                 Vec<IL2CppType>,
     generic_class_array: Vec<IL2CppGenericClass>,
@@ -759,11 +761,11 @@ impl IL2CppStruct {
         None
     }
     
-    pub fn get_field_offsets(&self, idx: u32, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+    pub fn get_field_offsets(&self, idx: u32, meta: &IL2CppDumper, table: &mut FxHashMap<String, u64>) {
         self.get_field_offsets_internal(idx, 0, &meta.get_string(self.name_off), meta, table);
     }
     
-    fn get_field_offsets_internal(&self, idx: u32, recursion: u32, prefix: &str, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+    fn get_field_offsets_internal(&self, idx: u32, recursion: u32, prefix: &str, meta: &IL2CppDumper, table: &mut FxHashMap<String, u64>) {
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
         if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
             for field_idx in 0 .. self.field_count as usize {
@@ -798,7 +800,7 @@ impl IL2CppStruct {
         }
     }
     
-    fn get_enum_stuff(&self, meta: &IL2CppDumper, table: &mut HashMap<String, u64>) {
+    fn get_enum_stuff(&self, meta: &IL2CppDumper, table: &mut FxHashMap<String, u64>) {
         
         fn read_compressed_u32(meta: &IL2CppDumper, off: usize) -> u32 {
             let byte = meta.metadata[off] as u32;
@@ -914,7 +916,7 @@ impl IL2CppStruct {
     }
     
     fn decode(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32) {
-        let mut table: HashMap<String, u64> = HashMap::new();
+        let mut table: FxHashMap<String, u64> = HashMap::default();
         self.get_enum_stuff(meta, &mut table);
         format_to!(out_str, "struct {} {{\n", self.get_name(meta));
         
@@ -923,7 +925,7 @@ impl IL2CppStruct {
         format_to!(out_str, "}}\n\n");
     }
     
-    fn decode_recursive(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32, table: &HashMap<String, u64>, recursion: u32) {
+    fn decode_recursive(&self, meta: &IL2CppDumper, out_str: &mut String, idx: u32, table: &FxHashMap<String, u64>, recursion: u32) {
         if recursion < 5 {
             if let Some(strukt_idx) = self.get_parent_struct_idx(meta).map(|x| x as usize) {
                 let strukt = IL2CppStruct::from_bytes(
@@ -1156,9 +1158,9 @@ impl IL2CppDumper {
             exported_type_definitions: OffSiz::from_bytes(&metadata[0x0f8..0x100]),
             
             methods_array:        Vec::new(),
-            methods_table:        HashMap::new(),
-            method_addr_table:    HashMap::new(),
-            field_default_lookup: HashMap::new(),
+            methods_table:        HashMap::default(),
+            method_addr_table:    HashMap::default(),
+            field_default_lookup: HashMap::default(),
             icgm_array:           Vec::new(),
             types_array:          Vec::new(),
             generic_class_array:  Vec::new(),
@@ -1216,7 +1218,7 @@ impl IL2CppDumper {
     fn populate_icgm(&mut self) {
         let image_cnt = self.images.siz as usize / IMAGE_STRIDE;
         
-        let mut cgm_table: HashMap<String,CodeGenModule> = HashMap::with_capacity(image_cnt);
+        let mut cgm_table: FxHashMap<String,CodeGenModule> = HashMap::with_capacity_and_hasher(image_cnt, BuildHasherDefault::default());
         self.icgm_array.reserve_exact(image_cnt);
         
         for i in 0..image_cnt {
@@ -1289,7 +1291,7 @@ impl IL2CppDumper {
             }
         }
         
-        let mut unresolved_method_table: HashMap<usize, u16> = HashMap::with_capacity(16);
+        let mut unresolved_method_table: FxHashMap<usize, u16> = HashMap::with_capacity_and_hasher(16, BuildHasherDefault::default());
         
         for icgm in self.icgm_array.iter().enumerate() {
             for i in 0 .. icgm.1.cgm.method_ptrs_cnt as usize {
@@ -1391,7 +1393,7 @@ impl IL2CppDumper {
         self.types_array[idx as usize].name(self)
     }
     
-    pub fn get_field_offsets(&self, table: &mut HashMap<String, u64>) {
+    pub fn get_field_offsets(&self, table: &mut FxHashMap<String, u64>) {
         let typ_cnt    = self.type_definitions.siz as usize / STRUCT_STRIDE;
         for i in 0..typ_cnt {
             let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);
@@ -1399,7 +1401,7 @@ impl IL2CppDumper {
         }
     }
     
-    pub fn get_enum_variants(&self, table: &mut HashMap<String, u64>) {
+    pub fn get_enum_variants(&self, table: &mut FxHashMap<String, u64>) {
         let typ_cnt    = self.type_definitions.siz as usize / STRUCT_STRIDE;
         for i in 0..typ_cnt {
             let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[i*STRUCT_STRIDE..i*STRUCT_STRIDE+STRUCT_STRIDE]);

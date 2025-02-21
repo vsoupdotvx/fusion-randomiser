@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
+
+use fxhash::FxHashMap;
 
 use crate::il2cppdump::IL2CppDumper;
 
@@ -15,7 +17,7 @@ pub struct ZombieData {
     pub id_name:        &'static str,
     pub allowed_lanes:  ZombieLanes,
     pub default_weight: u32,
-    default_points:     u32,
+    pub default_points: u32,
     pub id:             Option<i32>,
     pub is_elite:       bool,
     pub is_odyssey:     bool,
@@ -34,6 +36,7 @@ pub struct LevelData {
     pub flags: Option<u8>,
     pub default_zombie_names: Vec<&'static str>,
     pub default_zombie_types: Vec<u32>,
+    pub is_conveyor: bool,
 }
 
 impl Default for ZombieData {
@@ -57,12 +60,13 @@ impl Default for LevelData {
             flags: Some(1),
             default_zombie_names: vec!["ZombieType::NormalZombie"],
             default_zombie_types: Vec::new(),
+            is_conveyor: false,
         }
     }
 }
 
 pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
-    let mut il2cpp_syms: HashMap<String, u64> = HashMap::with_capacity(dump.methods_array.len()*3);
+    let mut il2cpp_syms: FxHashMap<String, u64> = HashMap::with_capacity_and_hasher(dump.methods_array.len()*3, BuildHasherDefault::default());
     
     dump.get_field_offsets(&mut il2cpp_syms);
     dump.get_enum_variants(&mut il2cpp_syms);
@@ -370,6 +374,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Pool,
+            is_conveyor: true,
             ..Default::default()
         },
         LevelData { //1C
@@ -479,6 +484,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
+            is_conveyor: true,
             ..Default::default()
         },
         LevelData { //25
@@ -586,6 +592,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Roof,
+            is_conveyor: true,
             ..Default::default()
         },
     ];

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
 
 use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
@@ -111,7 +111,7 @@ impl RandomisationData {
     }
     
     fn get_plant_ids(meta: &IL2CppDumper) -> Vec<u32> {
-        let mut enum_variants: HashMap<String, u64> = HashMap::with_capacity(16384);
+        let mut enum_variants: FxHashMap<String, u64> = HashMap::with_capacity_and_hasher(16384, BuildHasherDefault::default());
         let mut plant_ids: Vec<u32> = Vec::with_capacity(384);
         
         meta.get_enum_variants(&mut enum_variants);
