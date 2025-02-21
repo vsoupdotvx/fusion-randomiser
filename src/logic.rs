@@ -36,9 +36,9 @@ enum ImpossibleReason {
 #[derive(Clone)]
 struct FrequencyData {
     raw_averages: Vec<f32>,
-    max_frequency: HashMap<u32, (f32, u32)>,
-    first_flag_totals: HashMap<u32, f32>,
-    first_wave_occurence_avgs: HashMap<u32, u32>,
+    max_frequency: FxHashMap<u32, (f32, u32)>,
+    first_flag_totals: FxHashMap<u32, f32>,
+    first_wave_occurence_avgs: FxHashMap<u32, u32>,
 }
 
 #[derive(Hash, Clone, Eq, PartialEq)]
@@ -491,9 +491,9 @@ impl RandomisationData {
         }
         //TODO: final wave additional zombies
         
-        let mut max_frequency = HashMap::new();
-        let mut first_flag_totals = HashMap::new();
-        let mut first_wave_occurence_avgs = HashMap::new();
+        let mut max_frequency = HashMap::default();
+        let mut first_flag_totals = HashMap::default();
+        let mut first_wave_occurence_avgs = HashMap::default();
         
         for (i, (id, _, _)) in spawn_vec.iter().enumerate() {
             let mut max_freq      = 0f32;
