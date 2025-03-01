@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::BuildHasherDefault};
 
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 
 use crate::il2cppdump::IL2CppDumper;
 
@@ -20,6 +20,9 @@ pub struct ZombieData {
     pub default_points: u32,
     pub id:             Option<i32>,
     pub is_elite:       bool,
+    pub is_vehicle:     bool,
+    pub can_hypno:      bool, //from direct hypno, not hypno scaredy/fume/wallnut
+    pub is_metal:       bool,
     pub is_odyssey:     bool,
 }
 
@@ -31,12 +34,58 @@ pub enum LevelType {
     Roof,
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Unlockable {
+    Peashooter = 0,
+    SunFlower,
+    CherryBomb,
+    WallNut,
+    PotatoMine,
+    Chomper,
+    SmallPuff,
+    FumeShroom,
+    HypnoShroom,
+    ScaredyShroom,
+    IceShroom,
+    DoomShroom,
+    LilyPad,
+    Squash,
+    ThreePeater,
+    Tanglekelp,
+    Jalapeno,
+    Caltrop,
+    TorchWood,
+    SeaShroom,
+    Plantern,
+    Cactus,
+    Blower,
+    StarFruit,
+    Pumpkin,
+    Magnetshroom,
+    Cabbagepult,
+    Pot,
+    Cornpult,
+    Garlic,
+    Umbrellaleaf,
+    Marigold,
+    Melonpult,
+    PresentZombie,
+    EndoFlame,
+    Present,
+    TallNut,
+    SpikeRock,
+    CattailPlant,
+    GloomShroom,
+    CobCannon,
+}
+
 pub struct LevelData {
     pub level_type: LevelType,
     pub flags: Option<u8>,
     pub default_zombie_names: Vec<&'static str>,
     pub default_zombie_types: Vec<u32>,
-    pub is_conveyor: bool,
+    pub conveyor_plants: Option<FxHashSet<Unlockable>>,
 }
 
 impl Default for ZombieData {
@@ -47,7 +96,10 @@ impl Default for ZombieData {
             default_weight: 0,
             default_points: 1,
             id: None,
+            is_vehicle: false,
             is_elite: false,
+            is_metal: false,
+            can_hypno: true,
             is_odyssey: false,
         }
     }
@@ -60,7 +112,7 @@ impl Default for LevelData {
             flags: Some(1),
             default_zombie_names: vec!["ZombieType::NormalZombie"],
             default_zombie_types: Vec::new(),
-            is_conveyor: false,
+            conveyor_plants: None,
         }
     }
 }
@@ -374,7 +426,16 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Pool,
-            is_conveyor: true,
+            conveyor_plants: Some([
+                Unlockable::LilyPad,
+                Unlockable::Squash,
+                Unlockable::ThreePeater,
+                Unlockable::Tanglekelp,
+                Unlockable::Jalapeno,
+                Unlockable::Caltrop,
+                Unlockable::TorchWood,
+                Unlockable::WallNut,
+            ].into_iter().collect()),
             ..Default::default()
         },
         LevelData { //1C
@@ -484,7 +545,17 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
-            is_conveyor: true,
+            conveyor_plants: Some([
+                Unlockable::LilyPad,
+                Unlockable::SeaShroom,
+                Unlockable::StarFruit,
+                Unlockable::Cactus,
+                Unlockable::Plantern,
+                Unlockable::Blower,
+                Unlockable::Pumpkin,
+                Unlockable::IceShroom,
+                Unlockable::Magnetshroom,
+            ].into_iter().collect()),
             ..Default::default()
         },
         LevelData { //25
@@ -592,7 +663,15 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ],
             flags: Some(4),
             level_type: LevelType::Roof,
-            is_conveyor: true,
+            conveyor_plants: Some([
+                Unlockable::Pot,
+                Unlockable::Cornpult,
+                Unlockable::Melonpult,
+                Unlockable::Cabbagepult,
+                Unlockable::Umbrellaleaf,
+                Unlockable::Jalapeno,
+                Unlockable::IceShroom,
+            ].into_iter().collect()),
             ..Default::default()
         },
     ];
@@ -622,6 +701,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::BucketZombie",
             default_weight: 2000,
             default_points: 4,
+            is_metal: true,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -648,12 +728,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::DoorZombie",
             default_weight: 2000,
             default_points: 4,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //9
             id_name: "ZombieType::FootballZombie",
             default_weight: 1500,
             default_points: 4,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //A
@@ -681,6 +763,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::BucketZombieDuck",
             default_weight: 0,
             default_points: 1,
+            is_metal: true,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
@@ -688,6 +771,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::SubmarineZombie",
             default_weight: 750,
             default_points: 7,
+            can_hypno: false,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
@@ -702,6 +786,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::DriverZombie",
             default_weight: 1000,
             default_points: 7,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //11
@@ -715,6 +800,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::SuperDriver",
             default_weight: 750,
             default_points: 7,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //13
@@ -767,6 +853,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 750,
             default_points: 7,
             is_elite: true,
+            can_hypno: false,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -787,6 +874,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::IronBallonZombie",
             default_weight: 1000,
             default_points: 5,
+            is_metal: true,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -794,24 +882,28 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::SuperJackboxZombie",
             default_weight: 1000,
             default_points: 5,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //1F
             id_name: "ZombieType::CatapultZombie",
             default_weight: 1000,
             default_points: 7,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //20
             id_name: "ZombieType::PogoZombie",
             default_weight: 1500,
             default_points: 4,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //21
             id_name: "ZombieType::LadderZombie",
             default_weight: 1500,
             default_points: 5,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //22
@@ -824,6 +916,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::Gargantuar",
             default_weight: 750,
             default_points: 8,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //24
@@ -832,6 +925,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_points: 8,
             is_odyssey: true,
             is_elite: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //25
@@ -845,6 +939,8 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 750,
             default_points: 8,
             is_elite: true,
+            can_hypno: false,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //27
@@ -853,12 +949,15 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_points: 8,
             is_elite: true,
             is_odyssey: true,
+            can_hypno: false,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //28
             id_name: "ZombieType::MachineNutZombie",
             default_weight: 750,
             default_points: 8,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //29
@@ -878,6 +977,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 500,
             default_points: 10,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //2C
@@ -947,6 +1047,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::RandomZombie",
             default_weight: 1000,
             default_points: 5,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //6A
@@ -954,6 +1055,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_elite: true,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //6B
@@ -967,6 +1069,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 500,
             default_points: 5,
             is_elite: true,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //6D
@@ -974,12 +1077,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 10,
             is_elite: true,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //6E
             id_name: "ZombieType::RandomPlusZombie",
             default_weight: 500,
             default_points: 7,
+            is_odyssey: true,
             ..ZombieData::default()
         },
         ZombieData { //6F
@@ -992,6 +1097,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::CherryCatapultZombie",
             default_weight: 750,
             default_points: 10,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //71
@@ -1005,6 +1111,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::IronPeaDoorZombie",
             default_weight: 500,
             default_points: 5,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //73
@@ -1030,6 +1137,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 750,
             default_points: 10,
             is_odyssey: true,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //C8
@@ -1038,6 +1146,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_points: 5,
             allowed_lanes: ZombieLanes::Water,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //C9
@@ -1045,6 +1154,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //CA
@@ -1059,6 +1169,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //CC
@@ -1066,6 +1177,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            is_metal: true, //UNTESTED
             ..ZombieData::default()
         },
         ZombieData { //CD
@@ -1073,6 +1185,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            can_hypno: false,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -1081,6 +1194,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 1,
             is_odyssey: true,
+            is_vehicle: true, //sounds like a catapult type zombie, though I haven't confirmed this
             ..ZombieData::default()
         },
         ZombieData { //CF
@@ -1109,6 +1223,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //D3
@@ -1116,6 +1231,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 1,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //D4
@@ -1123,6 +1239,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //D5
@@ -1152,6 +1269,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //D9
@@ -1173,6 +1291,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //DC
@@ -1180,6 +1299,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            is_metal: true,
             ..ZombieData::default()
         },
         ZombieData { //DD
@@ -1187,6 +1307,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            can_hypno: false,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -1195,6 +1316,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            is_vehicle: true,
             ..ZombieData::default()
         },
         ZombieData { //DF

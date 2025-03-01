@@ -29,6 +29,7 @@ fn main() {
     let mut seed_rng = ChaCha8Rng::from_os_rng();
     let mut seed_string = seed_rng.next_u64().to_string();
     let mut connect = true;
+    let mut restrictions = true;
     let mut out_dir: Option<String> = None;
     
     let mut arg_type = ArgType::None;
@@ -44,6 +45,7 @@ fn main() {
             }
             ArgType::None   => match arg.as_str() {
                 "--no-connect" => connect = false,
+                "-R" => restrictions = false,
                 "-o" => arg_type = ArgType::OutDir,
                 "-s" => arg_type = ArgType::Seed,
                 _ => panic!("Unknown argument \"{arg}\"")
@@ -160,7 +162,11 @@ fn main() {
                 }
             }
             
-            rand_data = Some(RandomisationData::no_restrictions(seed, &dumper, &fuse_map));
+            rand_data = Some(if restrictions {
+                RandomisationData::restrictions(seed, &dumper, &fuse_map)
+            } else {
+                RandomisationData::no_restrictions(seed, &dumper, &fuse_map)
+            });
             
             println!("Level order: {:?}", rand_data.as_ref().unwrap().level_order);
             
