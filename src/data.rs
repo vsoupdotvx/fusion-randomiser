@@ -26,6 +26,7 @@ pub struct ZombieData {
     pub is_odyssey:     bool,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum LevelType {
     Day,
     Night,
@@ -897,6 +898,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1500,
             default_points: 4,
             is_metal: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //21
@@ -910,6 +912,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::SuperPogoZombie",
             default_weight: 1000,
             default_points: 6,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //23
@@ -1124,6 +1127,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::JalaSquashZombie",
             default_weight: 500,
             default_points: 8,
+            is_odyssey: true, //this guy wasn't odyssey before despite being probably the most dangerous zombie here
             ..ZombieData::default()
         },
         ZombieData { //75
@@ -1216,6 +1220,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
+            can_hypno: false,
             ..ZombieData::default()
         },
         ZombieData { //D2

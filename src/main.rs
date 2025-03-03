@@ -17,6 +17,7 @@ pub mod process;
 pub mod util;
 pub mod data;
 pub mod logic;
+pub mod fast_map;
 
 #[derive(Debug)]
 enum ArgType {
