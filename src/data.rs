@@ -1013,6 +1013,13 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_points: 8,
             ..ZombieData::default()
         },
+        ZombieData { //31
+            id_name: "ZombieType::SnowGunZombie",
+            default_weight: 500,
+            default_points: 8,
+            is_odyssey: true, //no idea what this individual does, but they look scary in the almanac
+            ..ZombieData::default()
+        },
         ZombieData { //64
             id_name: "ZombieType::PeaShooterZombie",
             default_weight: 1000,
@@ -1141,6 +1148,13 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 750,
             default_points: 10,
             is_odyssey: true,
+            is_metal: true,
+            ..ZombieData::default()
+        },
+        ZombieData { //77
+            id_name: "ZombieType::IronBallonZombie2", //no almanac entry, hopefully not evil
+            default_weight: 1000,
+            default_points: 5,
             is_metal: true,
             ..ZombieData::default()
         },
@@ -1329,6 +1343,13 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 0,
             default_points: 10,
             is_odyssey: true,
+            ..ZombieData::default()
+        },
+        ZombieData { //E0
+            id_name: "ZombieType::UltimateJackboxZombie",
+            default_weight: 0,
+            default_points: 10,
+            is_metal: true,
             ..ZombieData::default()
         },
     ];

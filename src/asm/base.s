@@ -15,14 +15,14 @@ HASH_U32 = 0x1758F99D
 	call adventure_level_enter_2
 "ENDMainMenu_Btn::OnMouseUp(&mut self)+0x13B":
 
-"PrizeMgr::Click(&mut self)+0x47E":
+"PrizeMgr::Click(&mut self)+0x364":
 	call set_level_trophy
-"ENDPrizeMgr::Click(&mut self)+0x47E":
+"ENDPrizeMgr::Click(&mut self)+0x364":
 
-"UIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x332":
+"UIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x337":
 	call rerandomise
 	nop
-"ENDUIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x332":
+"ENDUIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x337":
 
 "MixData::InitMixData()+0x77":
 	call store_mix_data_ptr
@@ -42,15 +42,15 @@ HASH_U32 = 0x1758F99D
 	nop
 "ENDGiveFertilize::AvaliableToGive() -> bool+0x5C":
 
-"AnimUIOver::Die(&mut self)+0x7D4":
+"AnimUIOver::Die(&mut self)+0x824":
 	insb
 	jmp "AnimUIOver::Die.locY"
-"ENDAnimUIOver::Die(&mut self)+0x7D4":
+"ENDAnimUIOver::Die(&mut self)+0x824":
 
-"AnimUIOver::Die(&mut self)+0x8B5":
+"AnimUIOver::Die(&mut self)+0x905":
 	insb
 	jmp "AnimUIOver::Die.locBC"
-"ENDAnimUIOver::Die(&mut self)+0x8B5":
+"ENDAnimUIOver::Die(&mut self)+0x905":
 
 replace_card_unlock:
 	movl  %ecx, %edx
@@ -108,7 +108,7 @@ plant_type_flatten: #This likely needs to be checked every single update
 	
 	cmpl $1000, %ecx
 	jc   plant_type_flatten.locA
-		subl $68, %ecx
+		subl $61, %ecx
 	plant_type_flatten.locA:
 	
 	testl %ecx, %ecx
@@ -126,9 +126,9 @@ plant_type_flatten: #This likely needs to be checked every single update
 		subl $541, %ecx
 	plant_type_flatten.locC:
 	
-	cmpl $242, %ecx
+	cmpl $241, %ecx
 	jc   plant_type_flatten.locD
-		subl $207, %ecx
+		subl $206, %ecx
 	plant_type_flatten.locD:
 	
 	orq %rcx, %rax
@@ -141,7 +141,7 @@ zombie_type_flatten:
 	
 	cmpl $200, %ecx
 	jc   zombie_type_flatten.locA
-		subl $81, %ecx
+		subl $80, %ecx
 	zombie_type_flatten.locA:
 	
 	testl %ecx, %ecx
@@ -149,7 +149,7 @@ zombie_type_flatten:
 	
 	cmpl $100, %ecx
 	jc   zombie_type_flatten.locB
-		subl $51, %ecx
+		subl $50, %ecx
 	zombie_type_flatten.locB:
 	
 	negq %rax
@@ -175,14 +175,14 @@ zombie_type_widen:
 	
 	negq %rax
 	
-	cmpl $49, %ecx
+	cmpl $50, %ecx
 	jc zombie_type_widen.locB
-		addl $51, %ecx
+		addl $50, %ecx
 	zombie_type_widen.locB:
 	
-	cmpl $119, %ecx
+	cmpl $120, %ecx
 	jc zombie_type_widen.locC
-		addl $81, %ecx
+		addl $80, %ecx
 	zombie_type_widen.locC:
 	
 	orq %rcx, %rax
@@ -460,7 +460,7 @@ wait_on_rust:
 	ret
 
 rerandomise:
-	movl %ebp, GameAPP.theBoardType(%rcx)
+	movl %esi, GameAPP.theBoardType(%rcx)
 	movq %rcx, game_app_ptr(%rip)
 	cmpq $0,   mix_data_ptr(%rip)
 	jne  rerandomise.locA

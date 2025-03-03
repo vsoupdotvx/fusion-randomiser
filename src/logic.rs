@@ -1109,6 +1109,7 @@ impl RandomisationData {
                 ("ZombieType::ElitePaperZombie",0.05,0.4,0.8,1.5,true,false,false),
                 ("ZombieType::SuperPogoZombie",0.05,0.4,0.8,2.0,true,true,false),
                 ("ZombieType::MachineNutZombie",0.05,0.4,0.8,1.5,true,true,false),
+                ("ZombieType::SnowGunZombie",0.05,0.4,0.8,1.5,true,false,false), //still don't know what this individual does, but they look like they belong here
                 ("ZombieType::CherryShooterZombie",0.05,0.4,0.8,1.5,true,false,true),
                 ("ZombieType::SuperCherryShooterZombie",0.05,0.3,0.6,1.0,false,false,true),
                 ("ZombieType::CherryPaperZombie",0.05,0.4,0.8,2.0,false,false,true),
@@ -1329,6 +1330,7 @@ impl RandomisationData {
             for (zombie_type, low_threshold, high_threshold, can_blover) in [ //balloons
                 ("ZombieType::BalloonZombie",0.05,0.2,true),
                 ("ZombieType::IronBallonZombie",0.05,0.2,true),
+                ("ZombieType::IronBallonZombie2",0.05,0.2,true), //I think I can safely put this individual here
                 ("ZombieType::KirovZombie",0.05,0.2,false),
                 ("ZombieType::UltimateKirovZombie",0.05,0.2,false),
             ] {
