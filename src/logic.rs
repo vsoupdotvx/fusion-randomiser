@@ -807,7 +807,6 @@ impl RandomisationData {
         })
     }
     
-    #[allow(clippy::redundant_allocation)] //allocation is redundant but also necessary
     fn compute_zombie_freq_data_cached(&mut self, level_spawns: &[(u32,u32)], level: usize) -> Option<FrequencyData> {
         let key = FrequencyCacheKey {
             spawns: level_spawns.into(),
@@ -837,7 +836,6 @@ impl RandomisationData {
         }
     }
     
-    #[allow(clippy::redundant_allocation)] //allocation is redundant but also necessary
     fn is_any_solution_satisfied(&mut self, solutions: &Solutions, level: &LevelData, used_solutions: &mut FxHashMap<Solutions, u32>) -> bool { //also mutates self
         let unlocked_plants = if let Some(conveyor_plants) = &level.conveyor_plants {
             conveyor_plants
@@ -863,7 +861,6 @@ impl RandomisationData {
         solution_found
     }
     
-    #[allow(clippy::redundant_allocation)] //allocation is redundant but also necessary
     fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32) -> Result<(),Vec<ImpossibleReason>> {
         let mut ret = Vec::new();
         #[allow(static_mut_refs)]
