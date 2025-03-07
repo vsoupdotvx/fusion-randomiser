@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault};
+use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault, mem::transmute};
 
 use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
@@ -18,11 +18,19 @@ pub struct RandomisationData {
     restrictions_data: Option<RestrictionsData>,
 }
 
+#[derive(Clone)]
+struct LevelPlants {
+    menu: Vec<(u8, u8)>,
+    all: Vec<u8>,
+}
+
 struct RestrictionsData {
     frequency_cache: FxHashMap<FrequencyCacheKey, FrequencyData>,
     level_spawns: FxHashMap<u8, Vec<(u32,u32)>>,
     modified_level_spawns: FxHashMap<u8, Vec<(u32,u32)>>,
-    _level_plants: FxHashMap<u8, Vec<(u8, u8, u8)>>,
+    level_plants: FxHashMap<u8, LevelPlants>,
+    modified_level_plants: FxHashMap<u8, LevelPlants>,
+    plant_map: FxHashMap<String, u32>,
     unlocked_plants: FxHashSet<Unlockable>,
 }
 
@@ -33,7 +41,7 @@ enum ImpossibleReason {
     NoPot,
     FourFlag,
     HardZombies(f64, FxHashMap<u32,u32>),
-    BadPlants(Vec<(u8,u8)>),
+    BadPlants(f64, Vec<(Unlockable,u8,u8,u8)>),
 }
 
 #[allow(dead_code)]
@@ -152,7 +160,7 @@ impl RandomisationData {
     
     fn weight_curve(int: u32) -> f64 {
         let num = int as f64 / u32::MAX as f64;
-        10.0f64.powf(((64. / 15. * num - 32. / 5.) * num + 62. / 15.) * num - 1.)
+        ((64. / 15. * num - 32. / 5.) * num + 62. / 15.) * num - 1.
     }
     
     fn xor_bit_in_bitfield(bit: usize, bitfield: &mut [u8]) {
@@ -166,7 +174,7 @@ impl RandomisationData {
         
         #[allow(static_mut_refs)]
         for zombie in unsafe {ZOMBIE_DATA.as_ref()}.unwrap() {
-            let weight_mul = Self::weight_curve(rng.next_u32());
+            let weight_mul = 10f64.powf(Self::weight_curve(rng.next_u32()));
             for byte in ((weight_mul * zombie.default_weight as f64).round() as i32).to_le_bytes() {
                 ret.push(byte);
             }
@@ -362,8 +370,7 @@ impl RandomisationData {
     
     
     
-    fn weight_curve_inverse(float: f64) -> f64 {
-        let x   = float.log10();
+    fn weight_curve_inverse(x: f64) -> f64 {
         let x2  = x*x;
         ((0.43080993081*x2-0.835882783883)*x2+0.905073260073)*x+0.5 //a crude approximation of the inverse of the input polynomial
     }
@@ -379,6 +386,84 @@ impl RandomisationData {
         }
         
         ret
+    }
+    
+    fn get_plant_map_and_ids(meta: &IL2CppDumper) -> (FxHashMap<String, u32>, Vec<u32>, FxHashMap<u32, u32>) {
+        let mut enum_variants: FxHashMap<String, u64> = HashMap::with_capacity_and_hasher(16384, BuildHasherDefault::default());
+        let mut plant_map: FxHashMap<String, u32> = HashMap::with_capacity_and_hasher(384, BuildHasherDefault::default());
+        let mut rev_map: FxHashMap<u32, u32> = HashMap::with_capacity_and_hasher(384, BuildHasherDefault::default());
+        let mut plant_ids: Vec<u32> = Vec::with_capacity(384);
+        
+        meta.get_enum_variants(&mut enum_variants);
+        
+        for (name, val) in enum_variants {
+            if name.starts_with("PlantType::") && val as i64 >= 0 {
+                plant_ids.push(val as u32);
+                plant_map.insert(name.strip_prefix("PlantType::").unwrap().to_owned(), val as u32);
+            }
+        }
+        
+        plant_ids.sort_unstable();
+        
+        for (i, plant_id) in plant_ids.iter().enumerate() {
+            rev_map.insert(*plant_id, i as u32);
+        }
+        
+        for val in plant_map.values_mut() {
+            *val = *rev_map.get(val).unwrap();
+        }
+        
+        (plant_map, plant_ids, rev_map)
+    }
+    
+    fn randomise_plant_attrs(&mut self, meta: &IL2CppDumper, fuse_data: &HashMap<u32,[u32;2]>, seed: u64) {
+        let (plant_map, plant_ids, rev_map) = Self::get_plant_map_and_ids(meta);
+        
+        let mut cost_rng      = ChaCha8Rng::seed_from_u64(seed ^ hash_str("plant_cost"));
+        let mut cooldowns_rng = ChaCha8Rng::seed_from_u64(seed ^ hash_str("plant_cooldowns"));
+        let mut firerates_rng = ChaCha8Rng::seed_from_u64(seed ^ hash_str("plant_firerates"));
+        let restrictions_data = self.restrictions_data.as_mut().unwrap();
+        
+        let mut non_fused_ids: FxHashSet<u32> = plant_ids.iter().copied().collect();
+        for k in fuse_data.keys() {
+            non_fused_ids.remove(k);
+        }
+        
+        for level_idx in 2..=45 {
+            let mut cooldowns: Vec<(u32, u8)> = Vec::with_capacity(48);
+            let mut costs:     Vec<(u32, u8)> = Vec::with_capacity(48);
+            let mut firerates: Vec<u8> = vec![0; plant_ids.len()];
+            for i in 0..48 {
+                let byte = (Self::weight_curve(i * 0x572_620A) * 127.5 + 127.5).round() as u8; //0x572_620A is 2^32 / 47
+                cooldowns.push((cooldowns_rng.next_u32(), if self.cooldowns.is_some() {byte} else {0x80}));
+                costs.push((cost_rng.next_u32(), if self.costs.is_some() {byte} else {0x80}));
+            }
+            
+            for i in non_fused_ids.iter() {
+                firerates[*rev_map.get(i).unwrap() as usize] = (if self.firerates.is_some() {firerates_rng.next_u32() >> 24} else {0x80}) as u8;
+            }
+            
+            cooldowns.sort_by_key(|(key, _)| *key);
+            costs.sort_by_key(|(key, _)| *key);
+            
+            let mut menu: Vec<(u8, u8)> = cooldowns
+                .iter()
+                .zip(costs.iter())
+                .map(|((_, cd), (_, cs))| (*cd, *cs))
+                .collect();
+            
+            menu[1].0 = menu[1].0.min(0x80);
+            menu[1].1 = menu[1].1.min(0x80);
+            
+            Self::set_fusion_firerates(&mut firerates, &plant_ids, fuse_data);
+            
+            restrictions_data.level_plants.insert(level_idx, LevelPlants {
+                menu,
+                all: firerates,
+            });
+        }
+        
+        restrictions_data.plant_map = plant_map;
     }
     
     fn get_solutions_1() -> FxHashMap<Problem, Solutions> {
@@ -836,7 +921,13 @@ impl RandomisationData {
         }
     }
     
-    fn is_any_solution_satisfied(&mut self, solutions: &Solutions, level: &LevelData, used_solutions: &mut FxHashMap<Solutions, u32>) -> bool { //also mutates self
+    fn is_any_solution_satisfied(
+        &mut self,
+        solutions: &Solutions,
+        level: &LevelData,
+        used_solutions: &mut FxHashMap<Solutions, u32>,
+        importance: u32
+    ) -> bool {
         let unlocked_plants = if let Some(conveyor_plants) = &level.conveyor_plants {
             conveyor_plants
         } else {
@@ -856,12 +947,15 @@ impl RandomisationData {
             solution_found = true;
         }
         
-        used_solutions.entry(vec.into_boxed_slice()).and_modify(|x| *x += 1).or_insert(1);
+        if solution_found {
+            used_solutions.entry(vec.into_boxed_slice()).and_modify(|x| *x += importance).or_insert(importance);
+        }
         
         solution_found
     }
     
-    fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32) -> Result<(),Vec<ImpossibleReason>> {
+    fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32, seed: u64) -> Result<(),Vec<ImpossibleReason>> {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("more_plant_stuff")) ^ level_idx as u64);
         let mut ret = Vec::new();
         #[allow(static_mut_refs)]
         let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
@@ -879,16 +973,16 @@ impl RandomisationData {
                 LevelType::Pool |
                 LevelType::Fog => {
                     match flags {
-                        1 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water1).unwrap(), level, &mut used_solutions)
+                        1 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water1).unwrap(), level, &mut used_solutions, 3)
                             && !(2..=4).contains(&(level_true_idx % 7)) {
                             ret.push(ImpossibleReason::NoWaterSolution);
                         }
-                        2 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water2).unwrap(), level, &mut used_solutions)
+                        2 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water2).unwrap(), level, &mut used_solutions, 3)
                             && !(2..=4).contains(&(level_true_idx % 7)) {
                             ret.push(ImpossibleReason::NoWaterSolution);
                         }
                         3 |
-                        4 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water34).unwrap(), level, &mut used_solutions) {
+                        4 => if !self.is_any_solution_satisfied(solutions.get(&Problem::Water34).unwrap(), level, &mut used_solutions, 3) {
                             ret.push(ImpossibleReason::NoWaterSolution);
                         }
                         _ => unreachable!(),
@@ -897,7 +991,7 @@ impl RandomisationData {
                 LevelType::Roof => {
                     match flags {
                         1 => {}
-                        _ => if !self.is_any_solution_satisfied(solutions.get(&Problem::Roof).unwrap(), level, &mut used_solutions) {
+                        _ => if !self.is_any_solution_satisfied(solutions.get(&Problem::Roof).unwrap(), level, &mut used_solutions, 3) {
                             ret.push(ImpossibleReason::NoPot);
                         }
                     }
@@ -911,46 +1005,55 @@ impl RandomisationData {
         let zombie_map = Self::get_zombie_map();
         let mut threshold_table = vec![999f32; zombie_data.len()];
         if let Some(spawn_data) = self.compute_zombie_freq_data_cached(&spawns, level_idx as usize) {
-            for (zombie_type, low_threshold, high_threshold, really_high_threshold) in [ //high health
-                ("ZombieType::FootballZombie",0.2,0.6,3.0),
-                ("ZombieType::DollSilver",0.1,0.6,1.5),
-                ("ZombieType::DriverZombie",0.2,0.6,2.0),
-                ("ZombieType::SuperDriver",0.2,0.6,2.0),
-                ("ZombieType::SuperJackboxZombie",0.2,0.4,3.0),
-                ("ZombieType::SuperPogoZombie",0.1,0.8,1.5),
-                ("ZombieType::MachineNutZombie",0.1,1.2,2.0),
-                ("ZombieType::SnowZombie",0.2,1.0,4.0),
-                ("ZombieType::IronPeaZombie",0.1,0.8,2.0),
-                ("ZombieType::TallNutFootballZombie",0.1,0.8,1.5),
-                ("ZombieType::TallIceNutZombie",0.3,0.8,1.5),
-                ("ZombieType::CherryCatapultZombie",0.1,0.8,1.5),
-                ("ZombieType::IronPeaDoorZombie",0.1,0.4,0.5),
-                ("ZombieType::JalaSquashZombie",0.05,0.4,0.5),
-                ("ZombieType::GatlingFootballZombie",0.05,0.4,0.5),
-                ("ZombieType::SuperSubmarine",0.05,0.4,0.5),
-                ("ZombieType::JacksonDriver",0.025,0.2,0.25),
-                ("ZombieType::FootballDrown",0.1,0.8,1.5),
-                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.5),
-                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.5),
-                ("ZombieType::ObsidianImpZombie",0.1,0.8,1.5),
-                ("ZombieType::DiamondRandomZombie",0.025,0.2,0.25),
-                ("ZombieType::DrownpultZombie",0.1,0.8,1.5),
+            for (zombie_type, low_threshold, high_threshold, really_high_threshold, is_yeti) in [ //high health
+                ("ZombieType::FootballZombie",0.2,0.6,3.0,false),
+                ("ZombieType::DollSilver",0.1,0.6,1.5,false),
+                ("ZombieType::DriverZombie",0.2,0.6,2.0,false),
+                ("ZombieType::SuperDriver",0.2,0.6,2.0,false),
+                ("ZombieType::SuperJackboxZombie",0.2,0.4,3.0,false),
+                ("ZombieType::SuperPogoZombie",0.1,0.8,1.5,false),
+                ("ZombieType::MachineNutZombie",0.1,1.2,2.0,false),
+                ("ZombieType::SnowZombie",0.2,1.0,4.0,true),
+                ("ZombieType::IronPeaZombie",0.1,0.8,2.0,false),
+                ("ZombieType::TallNutFootballZombie",0.1,0.8,1.5,false),
+                ("ZombieType::TallIceNutZombie",0.3,0.8,1.5,false),
+                ("ZombieType::CherryCatapultZombie",0.1,0.8,1.5,false),
+                ("ZombieType::IronPeaDoorZombie",0.1,0.4,0.5,false),
+                ("ZombieType::JalaSquashZombie",0.05,0.4,0.5,false),
+                ("ZombieType::GatlingFootballZombie",0.05,0.4,0.5,false),
+                ("ZombieType::SuperSubmarine",0.05,0.4,0.5,false),
+                ("ZombieType::JacksonDriver",0.025,0.2,0.25,false),
+                ("ZombieType::FootballDrown",0.1,0.8,1.5,false),
+                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.5,false),
+                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.5,false),
+                ("ZombieType::ObsidianImpZombie",0.1,0.8,1.5,false),
+                ("ZombieType::DiamondRandomZombie",0.025,0.2,0.25,false),
+                ("ZombieType::DrownpultZombie",0.1,0.8,1.5,false),
             ] {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    if *max_frequency < low_threshold{
+                    let max_frequency = *max_frequency;
+                    if max_frequency < low_threshold{
                         continue;
                     }
                     
-                    let mut low_solutions = vec![
+                    let mut low_solutions = if !is_yeti {
                         vec![
-                            Unlockable::Squash,
-                        ].into_boxed_slice(),
+                            vec![
+                                Unlockable::Squash,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::Jalapeno,
+                            ].into_boxed_slice(),
+                        ]
+                    } else {
                         vec![
-                            Unlockable::Jalapeno,
-                        ].into_boxed_slice(),
-                    ];
+                            vec![
+                                Unlockable::Jalapeno,
+                            ].into_boxed_slice(),
+                        ]
+                    };
                     
                     if !zombie.is_vehicle && zombie.can_hypno {
                         low_solutions.push(vec![
@@ -960,12 +1063,15 @@ impl RandomisationData {
                     
                     let mut high_solutions = vec![
                         vec![
-                            Unlockable::Chomper,
-                        ].into_boxed_slice(),
-                        vec![
                             Unlockable::Melonpult,
                         ].into_boxed_slice(),
                     ];
+                    
+                    if !is_yeti {
+                        high_solutions.push(vec![
+                            Unlockable::Chomper,
+                        ].into_boxed_slice());
+                    }
                     
                     if !zombie.is_vehicle && zombie.can_hypno {
                         high_solutions.push(vec![
@@ -973,14 +1079,18 @@ impl RandomisationData {
                             Unlockable::SmallPuff,
                         ].into_boxed_slice());
                     } else if zombie.is_vehicle {
-                        high_solutions.push(
-                            vec![
+                        high_solutions.push(vec![
                             Unlockable::Caltrop,
                         ].into_boxed_slice());
                     }
                     
                     let mut r_high_solutions = vec![
                         vec![
+                            Unlockable::Peashooter,
+                            Unlockable::TorchWood,
+                        ].into_boxed_slice(),
+                        vec![
+                            Unlockable::ThreePeater,
                             Unlockable::TorchWood,
                         ].into_boxed_slice(),
                         vec![
@@ -989,8 +1099,10 @@ impl RandomisationData {
                         ].into_boxed_slice(),
                         vec![
                             Unlockable::CherryBomb,
+                            Unlockable::Peashooter,
                         ].into_boxed_slice(),
                         vec![
+                            Unlockable::Peashooter,
                             Unlockable::SmallPuff, //gatling puff is very good
                         ].into_boxed_slice(),
                     ];
@@ -1012,10 +1124,17 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions) {
-                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    if max_frequency < high_threshold {
+                        low_solutions.append(&mut high_solutions);
+                        low_solutions.append(&mut r_high_solutions);
+                    } else if max_frequency < really_high_threshold {
+                        high_solutions.append(&mut r_high_solutions);
+                    }
+                    
+                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             really_high_threshold
-                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             high_threshold
                         } else {
                             low_threshold
@@ -1037,11 +1156,12 @@ impl RandomisationData {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    if *max_frequency < low_threshold{
+                    let max_frequency = *max_frequency;
+                    if max_frequency < low_threshold{
                         continue;
                     }
                     
-                    let low_solutions = if !zombie.is_vehicle && zombie.can_hypno {
+                    let mut low_solutions = if !zombie.is_vehicle && zombie.can_hypno {
                         vec![vec![
                             Unlockable::HypnoShroom,
                         ].into_boxed_slice()]
@@ -1073,7 +1193,7 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    let r_high_solutions = if zombie.is_metal {
+                    let mut r_high_solutions = if zombie.is_metal {
                         vec![vec![
                             Unlockable::Magnetshroom,
                             Unlockable::Plantern,
@@ -1086,10 +1206,17 @@ impl RandomisationData {
                         Vec::new()
                     };
                     
-                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions) {
-                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    if max_frequency < high_threshold {
+                        low_solutions.append(&mut high_solutions);
+                        low_solutions.append(&mut r_high_solutions);
+                    } else if max_frequency < really_high_threshold {
+                        high_solutions.append(&mut r_high_solutions);
+                    }
+                    
+                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             really_high_threshold
-                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             high_threshold
                         } else {
                             low_threshold
@@ -1123,7 +1250,8 @@ impl RandomisationData {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    if *max_frequency < low_threshold{
+                    let max_frequency = *max_frequency;
+                    if max_frequency < low_threshold {
                         continue;
                     }
                     
@@ -1142,11 +1270,15 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    let mut high_solutions = vec![
+                    let mut high_solutions = if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 {
                         vec![
-                            Unlockable::Chomper,
-                        ].into_boxed_slice(),
-                    ];
+                            vec![
+                                Unlockable::Chomper,
+                            ].into_boxed_slice(),
+                        ]
+                    } else {
+                        Vec::new()
+                    };
                     
                     if !zombie.is_vehicle && zombie.can_hypno {
                         high_solutions.push(vec![
@@ -1192,6 +1324,11 @@ impl RandomisationData {
                     if can_firepower {
                         for solution in if level.level_type == LevelType::Roof {vec![
                             vec![
+                                Unlockable::Peashooter,
+                                Unlockable::TorchWood,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::ThreePeater,
                                 Unlockable::TorchWood,
                             ].into_boxed_slice(),
                             vec![
@@ -1200,8 +1337,10 @@ impl RandomisationData {
                             ].into_boxed_slice(),
                             vec![
                                 Unlockable::CherryBomb,
+                                Unlockable::Peashooter,
                             ].into_boxed_slice(),
                             vec![
+                                Unlockable::Peashooter,
                                 Unlockable::SmallPuff,
                             ].into_boxed_slice(),
                         ]} else {vec![
@@ -1219,6 +1358,13 @@ impl RandomisationData {
                         ]} {
                             r_high_solutions.push(solution);
                         }
+                    }
+                    
+                    if max_frequency < high_threshold {
+                        low_solutions.append(&mut high_solutions);
+                        low_solutions.append(&mut r_high_solutions);
+                    } else if max_frequency < really_high_threshold {
+                        high_solutions.append(&mut r_high_solutions);
                     }
                     
                     if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 {
@@ -1241,14 +1387,18 @@ impl RandomisationData {
                                 Unlockable::CherryBomb,
                                 Unlockable::WallNut,
                             ].into_boxed_slice());
+                            r_high_solutions.push(vec![
+                                Unlockable::CherryBomb,
+                                Unlockable::Pumpkin,
+                            ].into_boxed_slice());
                         }
                     }
                     
-                    let threshold = if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    let threshold = if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                         max_threshold
-                    } else if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    } else if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                         really_high_threshold
-                    } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                         high_threshold
                     } else {
                         low_threshold
@@ -1268,11 +1418,12 @@ impl RandomisationData {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    if *max_frequency < low_threshold{
+                    let max_frequency = *max_frequency;
+                    if max_frequency < low_threshold{
                         continue;
                     }
                     
-                    let low_solutions = vec![
+                    let mut low_solutions = vec![
                         vec![
                             Unlockable::DoomShroom,
                         ].into_boxed_slice(),
@@ -1292,6 +1443,11 @@ impl RandomisationData {
                     
                     let mut high_solutions = vec![
                         vec![
+                            Unlockable::Peashooter,
+                            Unlockable::TorchWood,
+                        ].into_boxed_slice(),
+                        vec![
+                            Unlockable::ThreePeater,
                             Unlockable::TorchWood,
                         ].into_boxed_slice(),
                         vec![
@@ -1299,9 +1455,11 @@ impl RandomisationData {
                             Unlockable::StarFruit,
                         ].into_boxed_slice(),
                         vec![
+                            Unlockable::Peashooter,
                             Unlockable::CherryBomb,
                         ].into_boxed_slice(),
                         vec![
+                            Unlockable::Peashooter,
                             Unlockable::SmallPuff,
                         ].into_boxed_slice(),
                     ];
@@ -1312,8 +1470,12 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions) {
-                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    if max_frequency < high_threshold {
+                        low_solutions.append(&mut high_solutions);
+                    }
+                    
+                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             high_threshold
                         } else {
                             low_threshold
@@ -1326,19 +1488,20 @@ impl RandomisationData {
             
             for (zombie_type, low_threshold, high_threshold, can_blover) in [ //balloons
                 ("ZombieType::BalloonZombie",0.05,0.2,true),
-                ("ZombieType::IronBallonZombie",0.05,0.2,true),
-                ("ZombieType::IronBallonZombie2",0.05,0.2,true), //I think I can safely put this individual here
+                ("ZombieType::IronBallonZombie",0.05,0.2,false),
+                ("ZombieType::IronBallonZombie2",0.05,0.2,false),
                 ("ZombieType::KirovZombie",0.05,0.2,false),
                 ("ZombieType::UltimateKirovZombie",0.05,0.2,false),
             ] {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let _zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    if *max_frequency < low_threshold{
+                    let max_frequency = *max_frequency;
+                    if max_frequency < low_threshold{
                         continue;
                     }
                     
-                    let low_solutions = vec![
+                    let mut low_solutions = vec![
                         vec![
                             Unlockable::DoomShroom,
                         ].into_boxed_slice(),
@@ -1361,7 +1524,11 @@ impl RandomisationData {
                             Unlockable::Cactus,
                             Unlockable::Plantern,
                         ].into_boxed_slice(),
-                    }];
+                    }, vec![
+                            Unlockable::Cactus,
+                            Unlockable::StarFruit,
+                        ].into_boxed_slice(),
+                    ];
                     
                     if can_blover {
                         high_solutions.push(vec![
@@ -1369,8 +1536,12 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions) {
-                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions) {
+                    if max_frequency < high_threshold {
+                        low_solutions.append(&mut high_solutions);
+                    }
+                    
+                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
                             high_threshold
                         } else {
                             low_threshold
@@ -1381,13 +1552,81 @@ impl RandomisationData {
                 }
             }
             
+            {
+                let (zombie_type, low_threshold, high_threshold) = ("ZombieType::SnorkleZombie",0.1,0.45);
+                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
+                    let max_frequency = *max_frequency;
+                    if max_frequency >= low_threshold {
+                        let mut low_solutions = vec![
+                            vec![
+                                Unlockable::LilyPad,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::Tanglekelp,
+                            ].into_boxed_slice(),
+                        ];
+                        
+                        let mut high_solutions = vec![
+                            vec![
+                                Unlockable::LilyPad,
+                                Unlockable::WallNut,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::LilyPad,
+                                Unlockable::Pumpkin,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::Tanglekelp,
+                                Unlockable::Squash,
+                            ].into_boxed_slice(),
+                        ];
+                        
+                        if max_frequency < high_threshold {
+                            low_solutions.append(&mut high_solutions);
+                        }
+                        
+                        if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                            let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
+                                high_threshold
+                            } else {
+                                low_threshold
+                            };
+                            
+                            threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
+                        }
+                    }
+                }
+            }
+            
+            for (zombie_type, true_max) in [ //I will add zombies here as needed
+                ("ZombieType::Dolphinrider",7.0),
+                ("ZombieType::SubmarineZombie",2.0), //I don't like these guys
+                ("ZombieType::BungiZombie",2.0), //its really funny when you get a bungee spam level, but it can be very problematic too
+            ] {
+                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(true_max);
+            }
+            
+            if level.level_type == LevelType::Roof && level.flags.unwrap_or(1) == 1 {
+                for (zombie_type, true_max) in [ //I will add zombies here as needed
+                    ("ZombieType::PogoZombie",2.0),
+                    ("ZombieType::SuperPogoZombie",0.8),
+                    ("ZombieType::JackboxJumpZombie",0.8),
+                ] {
+                    let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                    threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(true_max);
+                }
+            }
+            
             let mut removed_zombies: FxHashSet<u32> = HashSet::with_capacity_and_hasher(16, BuildHasherDefault::default());
             let mut new_spawns: Vec<(u32, u32)> = Vec::with_capacity(16);
-            let one_eigth_curved = Self::weight_curve(0x1FFF_FFFF);
+            let one_eigth_curved = 10f64.powf(Self::weight_curve(0x1FFF_FFFF));
             for (i, (threshold, zombie)) in threshold_table.iter().zip(zombie_data.iter()).enumerate() {
                 if let Some(weight) = spawns_map.get(&(i as u32)) {
-                    let (max_freq, _) = spawn_data.max_frequency.get(&(i as u32)).unwrap();
-                    let new_val = (*threshold / *max_freq) as f64 * *weight as f64 / zombie.default_weight as f64;
+                    let (max_freq, _) = *spawn_data.max_frequency.get(&(i as u32)).unwrap();
+                    let first_flag_cnt = *spawn_data.first_flag_totals.get(&(i as u32)).unwrap();
+                    let new_val = (*threshold / max_freq.max(first_flag_cnt)) as f64 * *weight as f64 / zombie.default_weight as f64;
                     if new_val > one_eigth_curved {
                         let new_weight = (new_val * zombie.default_weight as f64).round() as u32;
                         new_spawns.push((i as u32, new_weight.min(*weight)));
@@ -1402,18 +1641,19 @@ impl RandomisationData {
             let mut bad_zombies: FxHashMap<u32,u32> = HashMap::with_capacity_and_hasher(16, BuildHasherDefault::default());
             
             for (i, weight) in new_spawns {
-                let threshold     = threshold_table[i as usize];
-                let zombie        = &zombie_data[i as usize];
-                let (max_freq, _) = new_frequencies.max_frequency.get(&i).unwrap();
-                let new_val       = (threshold / *max_freq) as f64 * weight as f64 / zombie.default_weight as f64;
-                let new_weight    = (new_val * zombie.default_weight as f64).round() as u32;
-                let old_weight    = *spawns_map.get(&i).unwrap();
+                let threshold      = threshold_table[i as usize];
+                let zombie         = &zombie_data[i as usize];
+                let (max_freq, _)  = *new_frequencies.max_frequency.get(&i).unwrap();
+                let first_flag_cnt = *new_frequencies.first_flag_totals.get(&i).unwrap();
+                let new_val        = (threshold / max_freq.max(first_flag_cnt)) as f64 * weight as f64 / zombie.default_weight as f64;
+                let new_weight     = (new_val * zombie.default_weight as f64).round() as u32;
+                let old_weight     = *spawns_map.get(&i).unwrap();
                 
                 if new_val <= one_eigth_curved {
                     removed_zombies.insert(i);
                 } else if new_weight < old_weight {
-                    let old_val = Self::weight_curve_inverse(old_weight as f64 / zombie.default_weight as f64);
-                    let new_val = Self::weight_curve_inverse(new_val);
+                    let old_val = Self::weight_curve_inverse((old_weight as f64 / zombie.default_weight as f64).log10());
+                    let new_val = Self::weight_curve_inverse(new_val.log10());
                     bad_zombie_weight /= 1f64 + new_val - old_val;
                     bad_zombies.insert(i, new_weight);
                 }
@@ -1428,6 +1668,94 @@ impl RandomisationData {
             ret.push(ImpossibleReason::HardZombies(bad_zombie_weight.sqrt(), bad_zombies)); //sqrt has specified precision, not that the rest of the code cares
         }
         
+        
+        
+        let unlockable_useful_min_map: HashMap<Unlockable,(u8,u8,u8)> = [
+            (Unlockable::CherryBomb,  (0x20,0x98,0xD5)),
+            (Unlockable::PotatoMine,  (0x00,0x98,0xCD)),
+            (Unlockable::Chomper,     (0x00,0xC8,0xD5)),
+            (Unlockable::SmallPuff,   (0x50,0xE0,0xFF)),
+            (Unlockable::HypnoShroom, (0x00,0x98,0xD5)),
+            (Unlockable::IceShroom,   (0x20,0x98,0x70)),
+            (Unlockable::DoomShroom,  (0x10,0x80,0xD5)),
+            (Unlockable::LilyPad,     (0x00,0xC0,0xC0)),
+            (Unlockable::Squash,      (0x40,0xB0,0xC0)),
+            (Unlockable::ThreePeater, (0x60,0xF0,0x97)),
+            (Unlockable::Tanglekelp,  (0x40,0xB0,0xFF)),
+            (Unlockable::TorchWood,   (0x00,0xE0,0xA0)),
+            (Unlockable::Jalapeno,    (0x20,0x98,0xD5)),
+            (Unlockable::SeaShroom,   (0x50,0xE0,0xFF)),
+            (Unlockable::Pot,         (0x00,0xC0,0xC0)),
+            (Unlockable::Melonpult,   (0x40,0xF0,0xA0)),
+            (Unlockable::Present,     (0x00,0x80,0xC0)),
+            (Unlockable::EndoFlame,   (0x00,0xC0,0xFF)),
+        ].into_iter().collect();
+        let mut unlockable_importance = [0u32; 41];
+        for (solutions, importance) in used_solutions {
+            let mut total_weight = 0f64;
+            let mut solutions_weight_vec: Vec<(Box<[Unlockable]>, f64)> = Vec::with_capacity(solutions.len());
+            for solution in solutions {
+                let mut weight = 1f64;
+                for unlockable in &solution {
+                    weight += unlockable_importance[*unlockable as usize] as f64;
+                }
+                solutions_weight_vec.push((solution, total_weight));
+                total_weight += weight;
+            }
+            assert_ne!(solutions_weight_vec.len(), 0);
+            assert_ne!(total_weight, 0f64);
+            let val = rng.next_u32() as f64 / 4_294_967_296. * total_weight;
+            let idx = solutions_weight_vec.partition_point(|(_, csum)| *csum <= val);
+            let solution = &solutions_weight_vec[idx - 1].0;
+            for unlockable in solution {
+                unlockable_importance[*unlockable as usize] += importance;
+            }
+        }
+        
+        let restrictions_data = self.restrictions_data.as_ref().unwrap();
+        let plant_data = restrictions_data.level_plants.get(&(level_idx as u8)).unwrap();
+        let mut weight_div = 1f64;
+        let mut bad_plants_vec: Vec<(Unlockable,u8,u8,u8)> = Vec::with_capacity(16);
+        for (unlockable_id, importance) in unlockable_importance.into_iter().enumerate() {
+            if importance > 0 {
+                let unlockable: Unlockable = unsafe { transmute(unlockable_id as i8) };
+                let plant_true_idx = *restrictions_data.plant_map.get(&format!("{unlockable:?}")).unwrap();
+                let (min_useful_fr, max_useful_cd, max_useful_cs) = unlockable_useful_min_map.get(&unlockable).unwrap_or(&(0x50,0xE0,0xE0));
+                let maximum_firerate = if *min_useful_fr != 0x00 {
+                    ((255f32 - *min_useful_fr as f32) / (0.8 + 0.2 * importance as f32)).round() as u8
+                } else {
+                    0xFF
+                };
+                let maximum_cooldown = if *max_useful_cd != 0xFF {
+                    (*max_useful_cd as f32 / (0.8 + 0.2 * importance as f32)).round() as u8
+                } else {
+                    0xFF
+                };
+                let maximum_cost = if *max_useful_cs != 0xFF {
+                    (*max_useful_cs as f32 / (0.8 + 0.2 * importance as f32)).round() as u8
+                } else {
+                    0xFF
+                };
+                //println!("{unlockable:?}: ({:.3},{:.3},{:.3})", 1./display_mul(maximum_firerate), display_mul(maximum_cooldown), display_mul(maximum_cost));
+                let current_cooldown = plant_data.menu[unlockable_id].0;
+                let current_cost     = plant_data.menu[unlockable_id].1;
+                let current_firerate = plant_data.all[plant_true_idx as usize];
+                
+                if  current_cooldown > maximum_cooldown ||
+                    current_cost > maximum_cost ||
+                    current_firerate > maximum_firerate {
+                    
+                    bad_plants_vec.push((unlockable,maximum_firerate,maximum_cost,maximum_cooldown));
+                    weight_div += ((current_firerate as f64 - maximum_firerate as f64) / 255.).max(0.);
+                    weight_div += ((current_cost     as f64 - maximum_cost     as f64) / 255.).max(0.);
+                    weight_div += ((current_cooldown as f64 - maximum_cooldown as f64) / 255.).max(0.);
+                }
+            }
+        }
+        
+        if !bad_plants_vec.is_empty() {
+            ret.push(ImpossibleReason::BadPlants(1./weight_div.sqrt(), bad_plants_vec));
+        }
         
         if ret.is_empty() {
             Ok(())
@@ -1454,6 +1782,7 @@ impl RandomisationData {
         blacklist_set: &FxHashSet<u32>,
         cattail_girl: bool,
         rng: &mut ChaCha8Rng,
+        seed: u64,
     ) -> usize {
         let mut possible_levels: SmallVec<[(usize,f64); 64]> = SmallVec::new();
         let mut impossible_levels: SmallVec<[usize; 64]> = SmallVec::new();
@@ -1463,7 +1792,7 @@ impl RandomisationData {
             let mut level_weight = 1f64;
             
             if !(blacklist_set.contains(&(*level_idx as u32)) && remaining_levels.len() > 15) &&
-                match self.is_level_possible(*level_idx as u32, if cattail_girl {45 - remaining_levels.len() as u32} else {0}) {
+                match self.is_level_possible(*level_idx as u32, if cattail_girl {45 - remaining_levels.len() as u32} else {0}, seed) {
                 Ok(()) => true,
                 Err(reasons) => {
                     let mut possible = true;
@@ -1491,8 +1820,20 @@ impl RandomisationData {
                                 }
                                 restrictions_data.modified_level_spawns.insert(*level_idx, zombies);
                             }
-                            ImpossibleReason::BadPlants(_plants) => {
-                                possible = false;
+                            ImpossibleReason::BadPlants(weight_mul, new_plants) => {
+                                level_weight *= weight_mul;
+                                let restrictions_data = self.restrictions_data.as_mut().unwrap();
+                                let mut plants = (*restrictions_data.level_plants.get(level_idx).unwrap()).clone();
+                                for (unlockable, max_firerate, max_cost, max_cooldown) in new_plants {
+                                    let plant_true_idx = *restrictions_data.plant_map.get(&format!("{unlockable:?}")).unwrap();
+                                    let (cd, cs) = &mut plants.menu[unlockable as usize];
+                                    let fr = &mut plants.all[plant_true_idx as usize];
+                                    
+                                    *cd = (*cd).min(max_cooldown);
+                                    *cs = (*cs).min(max_cost);
+                                    *fr = (*fr).min(max_firerate);
+                                }
+                                restrictions_data.modified_level_plants.insert(*level_idx, plants);
                             }
                         }
                     }
@@ -1513,6 +1854,7 @@ impl RandomisationData {
         
         let val = rng.next_u32() as f64 / 4_294_967_296. * total_weight;
         let idx = possible_levels.partition_point(|(_, csum)| *csum <= val);
+        //println!("{val}, {possible_levels:?}");
         possible_levels[idx - 1].0
     }
     
@@ -1523,6 +1865,7 @@ impl RandomisationData {
         remaining_levels: &mut Vec<u8>,
         blacklist_set: &FxHashSet<u32>,
         rng: &mut ChaCha8Rng,
+        seed: u64,
     ) {
         let mut idx_vec: Vec<(u32, u32)> = Vec::with_capacity(possible_solutions.len());
         for i in 0..possible_solutions.len() {
@@ -1571,7 +1914,7 @@ impl RandomisationData {
                     Problem::NoPuff           => 2.5,
                 };
                 if !restrictions_data.unlocked_plants.contains(unlock) {
-                    let level_idx = Self::pick_level(self, remaining_levels, predetermined_level_plants, blacklist_set, false, rng);
+                    let level_idx = Self::pick_level(self, remaining_levels, predetermined_level_plants, blacklist_set, false, rng, seed);
                     let level_idx_idx = remaining_levels.binary_search(&(level_idx as u8)).unwrap();
                     remaining_levels.remove(level_idx_idx);
                     let restrictions_data = self.restrictions_data.as_mut().unwrap();
@@ -1584,7 +1927,7 @@ impl RandomisationData {
         }
     }
     
-    pub fn restrictions(seed: u64, _meta: &IL2CppDumper, _fuse_data: &HashMap<u32,[u32;2]>) -> Self {
+    pub fn restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &HashMap<u32,[u32;2]>) -> Self {
         #[allow(static_mut_refs)]
         let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
         #[allow(static_mut_refs)]
@@ -1598,18 +1941,22 @@ impl RandomisationData {
             level_order: Vec::with_capacity(45),
             plant_order: vec![0xFF; 48],
             weights: Some(Vec::new()),
-            firerates: None,
-            cooldowns: None,
-            costs: None,
+            firerates: Some(Vec::new()),
+            cooldowns: Some(Vec::new()),
+            costs: Some(Vec::new()),
             spawns: Some(Vec::new()),
             restrictions_data: Some(RestrictionsData {
                 frequency_cache: HashMap::default(),
                 level_spawns: HashMap::default(),
                 modified_level_spawns: HashMap::default(),
-                _level_plants: HashMap::default(),
+                level_plants: HashMap::default(),
+                modified_level_plants: HashMap::default(),
+                plant_map: HashMap::default(),
                 unlocked_plants: HashSet::default(),
             }),
         };
+        
+        ret.randomise_plant_attrs(meta, fuse_data, seed);
         
         let mut remaining_levels: Vec<u8> = (2..=45).collect();
         ret.level_order.push(1);
@@ -1618,6 +1965,15 @@ impl RandomisationData {
         }
         if let Some(spawns) = ret.spawns.as_mut() {
             spawns.push(vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        }
+        if let Some(firerates) = ret.firerates.as_mut() {
+            firerates.push(Vec::new());
+        }
+        if let Some(cooldowns) = ret.cooldowns.as_mut() {
+            cooldowns.push(Vec::new());
+        }
+        if let Some(costs) = ret.costs.as_mut() {
+            costs.push(Vec::new());
         }
         
         let restrictions_data = ret.restrictions_data.as_mut().unwrap();
@@ -1651,7 +2007,7 @@ impl RandomisationData {
                     }
                     *byte ^= 1 << bit_pos;
                     let idx = bit_pos as usize + byte_idx * 8;
-                    let weight_mul = Self::weight_curve(weights_rng.next_u32());
+                    let weight_mul = 10f64.powf(Self::weight_curve(weights_rng.next_u32()));
                     vec.push((idx as u32, (weight_mul * zombie_data[idx].default_weight as f64).round() as u32));
                     if zombie_data[idx].is_odyssey {
                         still_blacklist = true;
@@ -1682,6 +2038,8 @@ impl RandomisationData {
         
         let first_plant = first_plant_options[((plants_rng.next_u32() as u64 * first_plant_options.len() as u64) >> 32) as usize];
         plant_order.push(first_plant);
+        restrictions_data.unlocked_plants.insert(Unlockable::Peashooter);
+        restrictions_data.unlocked_plants.insert(Unlockable::SunFlower);
         restrictions_data.unlocked_plants.insert(first_plant);
         let mut predetermined_level_plants: FxHashMap<u8, (Unlockable, f32)> = HashMap::default();
         predetermined_level_plants.insert(1, (first_plant, 999.0));
@@ -1690,9 +2048,9 @@ impl RandomisationData {
         let possible_solutions_part_2 = Self::get_solutions_2();
         let possible_solutions_part_3 = Self::get_solutions_3();
         
-        ret.assign_solutions(possible_solutions_part_1, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng);
-        ret.assign_solutions(possible_solutions_part_2, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng);
-        ret.assign_solutions(possible_solutions_part_3, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng);
+        ret.assign_solutions(possible_solutions_part_1, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng, seed);
+        ret.assign_solutions(possible_solutions_part_2, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng, seed);
+        ret.assign_solutions(possible_solutions_part_3, &mut predetermined_level_plants, &mut remaining_levels, &blacklist_set, &mut plants_rng, seed);
         
         println!("Chosen plant solutions: {:?}", predetermined_level_plants.values().collect::<Vec<_>>());
         println!("Blacklist: {blacklist_set:?}");
@@ -1757,9 +2115,11 @@ impl RandomisationData {
         let restrictions_data = ret.restrictions_data.as_mut().unwrap();
         restrictions_data.unlocked_plants.drain();
         restrictions_data.unlocked_plants.insert(first_plant);
+        restrictions_data.unlocked_plants.insert(Unlockable::Peashooter);
+        restrictions_data.unlocked_plants.insert(Unlockable::SunFlower);
         
         while !remaining_levels.is_empty() {
-            let level_idx = Self::pick_level(&mut ret, &remaining_levels, &predetermined_level_plants, &blacklist_set, true, &mut level_rng);
+            let level_idx = Self::pick_level(&mut ret, &remaining_levels, &predetermined_level_plants, &blacklist_set, true, &mut level_rng, seed);
             let level_idx_idx = remaining_levels.binary_search(&(level_idx as u8)).unwrap();
             let restrictions_data = ret.restrictions_data.as_mut().unwrap();
             
@@ -1784,7 +2144,28 @@ impl RandomisationData {
                     spawns.push(spawns_bitfield);
                 }
             } else {
-                unreachable!()
+                unreachable!();
+            }
+            
+            if let Some(plants) = restrictions_data.level_plants.remove(&(level_idx as u8)) {
+                let actual_plants = if let Some(plants) = restrictions_data.modified_level_plants.remove(&(level_idx as u8)) {
+                    plants
+                } else {
+                    plants
+                };
+                let cd_vec: Vec<u8> = actual_plants.menu.iter().map(|(cd, _)| *cd).collect();
+                let cs_vec: Vec<u8> = actual_plants.menu.iter().map(|(_, cs)| *cs).collect();
+                if let Some(firerates) = ret.firerates.as_mut() {
+                    firerates.push(actual_plants.all);
+                }
+                if let Some(cooldowns) = ret.cooldowns.as_mut() {
+                    cooldowns.push(cd_vec);
+                }
+                if let Some(costs) = ret.costs.as_mut() {
+                    costs.push(cs_vec);
+                }
+            } else {
+                unreachable!();
             }
             
             remaining_levels.remove(level_idx_idx);
@@ -1831,4 +2212,9 @@ impl RandomisationData {
         
         ret
     }
+}
+
+#[allow(dead_code)]
+fn display_mul(mul: u8) -> f32 {
+    ((mul & 0x7F) as f32 / 127. + 1.) * if mul < 0x80 {0.5} else {1.}
 }
