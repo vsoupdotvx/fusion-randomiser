@@ -462,6 +462,7 @@ wait_on_rust:
 rerandomise:
 	movl %esi, GameAPP.theBoardType(%rcx)
 	movq %rcx, game_app_ptr(%rip)
+	movl $1, GameAPP.advantureZhouMu(%rcx)
 	cmpq $0,   mix_data_ptr(%rip)
 	jne  rerandomise.locA
 		call "MixData::InitMixData()"

@@ -67,6 +67,7 @@ fn main() {
     let cost_patch      = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/cost.o")));
     let cooldowns_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/cooldowns.o")));
     let spawns_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/spawns.o")));
+    let tweaks_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/tweaks.o")));
     
     let mut fusion = FusionProcess::new(connect).unwrap();
     let mut dumper = IL2CppDumper::initialize(&fusion.files_dir).unwrap();
@@ -103,6 +104,7 @@ fn main() {
         cost_patch.unwrap(),
         cooldowns_patch.unwrap(),
         spawns_patch.unwrap(),
+        tweaks_patch.unwrap(),
     ], &dumper, &mut fusion);
     println!("Game patched!");
     
