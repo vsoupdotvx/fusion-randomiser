@@ -453,10 +453,12 @@ exit_seed_select:
 
 wait_on_rust:
 	movb $1, stopped(%rip)
+	subq $0x20,       %rsp
 	wait_on_rust.locA:
 		call "System.Threading::Thread::Yield() -> bool"
 		cmpb $0, stopped(%rip)
-	jne wait_on_rust.locA
+	jne  wait_on_rust.locA
+	addq $0x20,       %rsp
 	ret
 
 rerandomise:
@@ -465,7 +467,9 @@ rerandomise:
 	movl $1, GameAPP.advantureZhouMu(%rcx)
 	cmpq $0,   mix_data_ptr(%rip)
 	jne  rerandomise.locA
+		subq $0x28, %rsp
 		call "MixData::InitMixData()"
+		addq $0x28, %rsp
 	rerandomise.locA:
 	call wait_on_rust
 	movb $1, on_seed_select(%rip)
