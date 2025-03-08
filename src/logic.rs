@@ -1227,25 +1227,26 @@ impl RandomisationData {
                 }
             }
             
-            for (zombie_type, low_threshold, high_threshold, really_high_threshold, max_threshold, can_firepower, can_umbrella, can_cwall) in [ //evil death zombies
-                ("ZombieType::DancePolZombie",0.05,0.4,0.8,2.0,true,false,false),
-                ("ZombieType::JacksonZombie",0.05,0.4,0.8,2.0,true,false,false),
-                ("ZombieType::ElitePaperZombie",0.05,0.4,0.8,1.5,true,false,false),
-                ("ZombieType::SuperPogoZombie",0.05,0.4,0.8,2.0,true,true,false),
-                ("ZombieType::MachineNutZombie",0.05,0.4,0.8,1.5,true,true,false),
-                ("ZombieType::SnowGunZombie",0.05,0.4,0.8,1.5,true,false,false), //still don't know what this individual does, but they look like they belong here
-                ("ZombieType::CherryShooterZombie",0.05,0.4,0.8,1.5,true,false,true),
-                ("ZombieType::SuperCherryShooterZombie",0.05,0.3,0.6,1.0,false,false,true),
-                ("ZombieType::CherryPaperZombie",0.05,0.4,0.8,2.0,false,false,true),
-                ("ZombieType::CherryCatapultZombie",0.05,0.4,0.8,1.5,true,true,false),
-                ("ZombieType::JalaSquashZombie",0.05,0.4,0.8,1.3,true,false,false),
-                ("ZombieType::JacksonDriver",0.05,0.2,0.4,0.8,false,false,false),
-                ("ZombieType::CherryPaperZ95",0.05,0.1,0.3,0.6,false,false,true),
-                ("ZombieType::QuickJacksonZombie",0.05,0.2,0.4,0.8,true,false,false),
-                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.8,1.5,true,true,false),
-                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.8,1.5,true,false,false),
-                ("ZombieType::DolphinGatlingZombie",0.05,0.2,0.4,1.0,true,false,false),
-                ("ZombieType::DrownpultZombie",0.05,0.4,0.8,2.0,false,false,true), //idk how bad these guys are actually, but they probably belong here
+            for (zombie_type, low_threshold, high_threshold, really_high_threshold, max_threshold,
+                can_firepower, can_umbrella, can_cwall, can_chomper) in [ //evil death zombies
+                ("ZombieType::DancePolZombie",0.05,0.4,0.8,2.0,true,false,false,false),
+                ("ZombieType::JacksonZombie",0.05,0.4,0.8,2.0,true,false,false,true),
+                ("ZombieType::ElitePaperZombie",0.05,0.4,0.8,1.5,true,false,false,true),
+                ("ZombieType::SuperPogoZombie",0.05,0.4,0.8,2.0,true,true,false,true),
+                ("ZombieType::MachineNutZombie",0.05,0.4,0.8,1.5,true,true,false,true),
+                ("ZombieType::SnowGunZombie",0.05,0.4,0.8,1.5,true,false,false,false),
+                ("ZombieType::CherryShooterZombie",0.05,0.4,0.8,1.5,true,false,true,true),
+                ("ZombieType::SuperCherryShooterZombie",0.05,0.3,0.6,1.0,false,false,true,false),
+                ("ZombieType::CherryPaperZombie",0.05,0.4,0.8,2.0,false,false,true,true),
+                ("ZombieType::CherryCatapultZombie",0.05,0.4,0.8,1.5,true,true,false,true),
+                ("ZombieType::JalaSquashZombie",0.05,0.4,0.8,1.3,true,false,false,false),
+                ("ZombieType::JacksonDriver",0.05,0.2,0.4,0.8,false,false,false,true),
+                ("ZombieType::CherryPaperZ95",0.05,0.1,0.3,0.6,false,false,true,true),
+                ("ZombieType::QuickJacksonZombie",0.05,0.2,0.4,0.8,true,false,false,true),
+                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.8,1.5,true,true,false,true),
+                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.8,1.5,true,false,false,true),
+                ("ZombieType::DolphinGatlingZombie",0.05,0.2,0.4,1.0,true,false,false,true),
+                ("ZombieType::DrownpultZombie",0.05,0.4,0.8,2.0,false,false,true,true), //idk how bad these guys are actually, but they probably belong here
             ] {
                 let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
@@ -1270,7 +1271,7 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    let mut high_solutions = if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 {
+                    let mut high_solutions = if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 && can_chomper {
                         vec![
                             vec![
                                 Unlockable::Chomper,
@@ -1345,15 +1346,18 @@ impl RandomisationData {
                             ].into_boxed_slice(),
                         ]} else {vec![
                             vec![
+                                Unlockable::Peashooter,
+                                Unlockable::TorchWood,
+                                Unlockable::Jalapeno,
+                            ].into_boxed_slice(),
+                            vec![
+                                Unlockable::ThreePeater,
                                 Unlockable::TorchWood,
                                 Unlockable::Jalapeno,
                             ].into_boxed_slice(),
                             vec![
                                 Unlockable::Plantern,
                                 Unlockable::StarFruit,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::SmallPuff,
                             ].into_boxed_slice(),
                         ]} {
                             r_high_solutions.push(solution);
