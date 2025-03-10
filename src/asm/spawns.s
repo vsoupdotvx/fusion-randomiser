@@ -1,8 +1,8 @@
 .section .text
 
-"InitZombieList::AdvantureZombieTypeSpawn(theLevelNumber: i32)+0x30":
-	.nops 0x15
-"ENDInitZombieList::AdvantureZombieTypeSpawn(theLevelNumber: i32)+0x30":
+"InitZombieList::AdvantureZombieTypeSpawn(theLevelNumber: i32)+0x43":
+	.nops 2
+"ENDInitZombieList::AdvantureZombieTypeSpawn(theLevelNumber: i32)+0x43":
 
 "InitZombieList::AdvantureZombieTypeSpawn(theLevelNumber: i32)+0x82":
 	jmp init_zombie_list

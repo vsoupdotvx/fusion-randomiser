@@ -262,8 +262,6 @@ impl FusionProcess {
             if retval == 0 {
                 break;
             }
-            println!("addr: 0x{addr:x}");
-            println!("state: {:?}", lp_buffer.State);
             if lp_buffer.State != MEM_FREE {
                 let range_start = lp_buffer.BaseAddress as u64;
                 map_ranges.push((range_start, range_start + lp_buffer.RegionSize as u64));
