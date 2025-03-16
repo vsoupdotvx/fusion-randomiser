@@ -196,6 +196,9 @@ fn main() {
             if let Some(spawns) = &rand_data.spawns {
                 fusion.write_memory(*sym_tab.get("zombie_spawn_bitfield").unwrap(), &spawns[level_idx as usize]).unwrap();
             }
+            if let Some(freqs) = &rand_data.freqs {
+                fusion.write_memory(*sym_tab.get("zombie_freqs").unwrap(), &freqs[level_idx as usize]).unwrap();
+            }
             if let Some(weights) = &rand_data.weights {
                 fusion.write_memory(*sym_tab.get("zombie_weights").unwrap(), &weights[level_idx as usize]).unwrap();
             }

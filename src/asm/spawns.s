@@ -119,21 +119,21 @@ set_zombie_txt:
 	ret
 	set_zombie_txt.locA:
 	subq $0x48, %rsp
-	movl $66, %ebx
+	movl $68, %ebx
 	
 	movl  Zombie.theZombieType(%rdi), %ecx
 	leaq  zombie_weights(%rip), %rdx
 	call  zombie_type_flatten
-	movl  (%rdx,%rax,4),     %ecx
-	movq  %rcx,        0x40(%rsp)
-	movss 0x200(%rdx,%rax), %xmm0
-	leaq  0x30(%rsp),        %rcx
+	movl  (%rdx,%rax,4),      %ecx
+	movq  %rcx,         0x40(%rsp)
+	movss 0x200(%rdx,%rax,4), %xmm0
+	leaq  0x30(%rsp),         %rcx
 	call  float_2_string_4sf_0t3xp
-	movq  0x40(%rsp),        %rcx
-	leaq  0x20(%rsp),        %rdx
+	movq  0x40(%rsp),         %rcx
+	leaq  0x20(%rsp),         %rdx
 	call  int_2_string_fast
-	addl  %eax,              %ebx
-	movl  %eax,              %ebp
+	addl  %eax,               %ebx
+	movl  %eax,               %ebp
 	
 	movl   %ebx, %ecx
 	shrl   $1,   %ecx
@@ -159,7 +159,7 @@ set_zombie_txt:
 	rep movsb
 	
 	leaq average_txt(%rip), %rsi
-	movb $20,                %cl
+	movb $21,                %cl
 	rep  movsw
 	
 	movq 0x40(%rsp), %rax
@@ -196,7 +196,7 @@ int_2_string_fast:
 	palignr $12, %xmm1, %xmm0
 	palignr $12, %xmm2, %xmm1
 	subps   %xmm0,      %xmm5
-	subps   %xmm2,      %xmm4
+	subps   %xmm1,      %xmm4
 	
 	cvtps2dq %xmm5, %xmm5
 	cvtps2dq %xmm4, %xmm4
@@ -240,10 +240,10 @@ float_2_string_4sf_0t3xp: #2 sigfigs, 0-3 (decimal) exponent
 	shll     $4,                 %edx
 	addss    const0.5(%rip),    %xmm0
 	pshufd   $0x00,   %xmm0,    %xmm1
-	mulss    card_create_label.constB(%rip), %xmm1
+	mulps    card_create_label.constB(%rip), %xmm1
 	roundps  $3,     %xmm1,     %xmm1
 	mulps    %xmm1,             %xmm2
-	psrldq   $4,                %xmm2
+	pslldq   $4,                %xmm2
 	subps    %xmm2,             %xmm1
 	cvtps2dq %xmm1,             %xmm1
 	paddd    const4x0x30(%rip), %xmm1
@@ -304,7 +304,7 @@ float_2_string_4sf_0t3xp.lutB:
 const0.5:
 	.float 0.5
 average_txt:
-	.ascii "\n\0A\0v\0e\0r\0a\0g\0e\0 \0f\0r\0e\0q\0u\0e\0n\0c\0y\0:\0 \0"
+	.ascii "\n\0A\0v\0e\0r\0a\0g\0e\0 \0#\0 \0i\0n\0 \0l\0e\0v\0e\0l\0:\0 \0"
 .align 16
 zombie_spawn_bitfield: #size: 46 + 19 + 24 = 89
 	.quad 0xFFFFAFFFFFFFFFFF

@@ -15,6 +15,7 @@ pub struct RandomisationData {
     pub cooldowns:     Option<Vec<Vec<u8>>>,
     pub costs:         Option<Vec<Vec<u8>>>,
     pub spawns:        Option<Vec<Vec<u8>>>,
+    pub freqs:         Option<Vec<Vec<u8>>>,
     restrictions_data: Option<RestrictionsData>,
 }
 
@@ -69,6 +70,7 @@ struct FrequencyData {
     max_frequency: FxHashMap<u32, (f32, u32)>,
     first_flag_totals: FxHashMap<u32, f32>,
     first_wave_occurence_avgs: FxHashMap<u32, u32>,
+    totals: Vec<u8>,
 }
 
 #[derive(Hash, Clone, Eq, PartialEq)]
@@ -85,12 +87,14 @@ impl RandomisationData {
         let level_order   = Self::randomise_level_order_no_restrictions(seed);
         let plant_order   = Self::randomise_plant_order_no_restrictions(seed);
         let mut weights   = Vec::new();
+        let mut freqs     = Vec::new();
         let mut firerates = Vec::new();
         let mut cooldowns = Vec::new();
         let mut costs     = Vec::new();
         let mut spawns    = Vec::new();
         
         weights.push(vec![1, 0, 0, 0]);
+        freqs.push(104f32.to_ne_bytes().to_vec());
         firerates.push(vec![0; plant_ids.len()]);
         cooldowns.push(vec![0; 2]);
         costs.push(vec![0; 2]);
@@ -126,7 +130,8 @@ impl RandomisationData {
                     level_true_idx,
                 )
             );
-            Self::compute_zombie_freq_data_bytes(&spawns[level_true_idx - 1], &weights[level_true_idx - 1], *level_idx as usize).unwrap();
+            let data = Self::compute_zombie_freq_data_bytes(&spawns[level_true_idx - 1], &weights[level_true_idx - 1], *level_idx as usize).unwrap();
+            freqs.push(data.totals);
         }
         
         Self {
@@ -137,6 +142,7 @@ impl RandomisationData {
             cooldowns: Some(cooldowns),
             costs:     Some(costs),
             spawns:    Some(spawns),
+            freqs:     Some(freqs),
             restrictions_data: None,
         }
     }
@@ -857,6 +863,7 @@ impl RandomisationData {
         let mut max_frequency = HashMap::default();
         let mut first_flag_totals = HashMap::default();
         let mut first_wave_occurence_avgs = HashMap::default();
+        let mut totals = vec![0x3F; zombie_data.len() * 4];
         
         for (i, (id, _, _)) in spawn_vec.iter().enumerate() {
             let mut max_freq      = 0f32;
@@ -882,6 +889,9 @@ impl RandomisationData {
             max_frequency.insert(*id, (max_freq, max_wave));
             first_flag_totals.insert(*id, total_freq_ff);
             first_wave_occurence_avgs.insert(*id, first_wave);
+            for (dst, src) in totals[*id as usize * 4 .. 4 + *id as usize * 4].iter_mut().zip((total_freq+1.).to_le_bytes()) {
+                *dst = src;
+            }
         }
         
         Some(FrequencyData {
@@ -889,6 +899,7 @@ impl RandomisationData {
             max_frequency,
             first_flag_totals,
             first_wave_occurence_avgs,
+            totals,
         })
     }
     
@@ -1949,6 +1960,7 @@ impl RandomisationData {
             cooldowns: Some(Vec::new()),
             costs: Some(Vec::new()),
             spawns: Some(Vec::new()),
+            freqs: Some(Vec::new()),
             restrictions_data: Some(RestrictionsData {
                 frequency_cache: HashMap::default(),
                 level_spawns: HashMap::default(),
@@ -1966,6 +1978,9 @@ impl RandomisationData {
         ret.level_order.push(1);
         if let Some(weights) = ret.weights.as_mut() {
             weights.push(vec![0xA0, 0xF, 0, 0]);
+        }
+        if let Some(freqs) = ret.freqs.as_mut() {
+            freqs.push(104f32.to_ne_bytes().to_vec());
         }
         if let Some(spawns) = ret.spawns.as_mut() {
             spawns.push(vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -2135,11 +2150,11 @@ impl RandomisationData {
                 };
                 let mut spawns_bitfield = vec![0; 16];
                 let mut weights_vec = vec![0; zombie_data.len() * 4];
-                for (idx, weight) in actual_spawns {
+                for (idx, weight) in actual_spawns.iter() {
                     for (i, byte) in weight.to_le_bytes().iter().enumerate() {
-                        weights_vec[(idx as usize) * 4 + i] = *byte;
+                        weights_vec[(*idx as usize) * 4 + i] = *byte;
                     }
-                    Self::xor_bit_in_bitfield(idx as usize, &mut spawns_bitfield);
+                    Self::xor_bit_in_bitfield(*idx as usize, &mut spawns_bitfield);
                 }
                 if let Some(weights) = ret.weights.as_mut() {
                     weights.push(weights_vec);
@@ -2147,10 +2162,15 @@ impl RandomisationData {
                 if let Some(spawns) = ret.spawns.as_mut() {
                     spawns.push(spawns_bitfield);
                 }
+                if ret.freqs.is_some() {
+                    let data = ret.compute_zombie_freq_data_cached(&actual_spawns, level_idx).unwrap();
+                    unsafe { ret.freqs.as_mut().unwrap_unchecked() }.push(data.totals);
+                }
             } else {
                 unreachable!();
             }
             
+            let restrictions_data = ret.restrictions_data.as_mut().unwrap();
             if let Some(plants) = restrictions_data.level_plants.remove(&(level_idx as u8)) {
                 let actual_plants = if let Some(plants) = restrictions_data.modified_level_plants.remove(&(level_idx as u8)) {
                     plants
