@@ -478,6 +478,30 @@ store_mix_data_ptr:
 	ret
 
 .section .data
+card_create_label.constA:
+	.float 0.0000001
+	.float 0.000001
+	.float 0.00001
+	.float 0.0001
+card_create_label.constB:
+	.float 0.001
+	.float 0.01
+	.float 0.1
+	.float 1
+const8x0x30:
+	.word 0x30
+	.word 0x30
+	.word 0x30
+	.word 0x30
+	.word 0x30
+	.word 0x30
+	.word 0x30
+	.word 0x30
+const4x10.0:
+	.float 10
+	.float 10
+	.float 10
+	.float 10
 fetch_cooldown_ptr:
 	.quad "OR_NULL fetch_cooldown"
 fetch_firerate_ptr:
@@ -486,6 +510,17 @@ game_app_ptr:
 	.quad 0
 mix_data_ptr:
 	.quad 0
+indicator_lut:
+	.word 0x0039; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0038; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0037; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0036; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0035; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0034; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0033; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0032; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0031; .word 0x0020; .word 0x007C; .word 0x0020
+	.word 0x0030; .word 0x0020; .word 0x007C; .word 0x0020
 level_idx:
 	.long 0
 menu_init_array:
