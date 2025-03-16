@@ -12,15 +12,17 @@ store_cooldown:
 	cmpl $1181, %ecx
 	ja   store_cooldown.locA
 		call plant_type_flatten_menu
-		cmpl $45, %eax
+		cmpl $48, %eax
 		jnc  store_cooldown.locA
 			leaq     plant_cd_table(%rip), %rdx
 			movzbl   (%rdx,%rax),     %edx
+			xorl     %ecx,            %ecx
 			shlb     $1,               %dl
+			setnc    %cl
 			cvtsi2ss %edx,           %xmm0
 			mulss    const1over254(%rip), %xmm0
 			addss    const1.0(%rip), %xmm0
-			jc       store_cooldown.locB
+			jrcxz    store_cooldown.locB
 				mulss const0.5(%rip), %xmm0
 			store_cooldown.locB:
 			mulss %xmm0, %xmm1

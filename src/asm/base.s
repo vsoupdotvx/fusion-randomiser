@@ -383,44 +383,41 @@ card_create_label: #seed packet cost in ecx
 	xorl %ecx, %ecx
 	call "System.Runtime.CompilerServices::RuntimeHelpers::get_OffsetToStringData() -> i32"
 	
-	movslq %eax,    %r8
-	testl  %r15d, %r15d
-	addq   %r8,    %rbp
-	je    card_create_label.locB
-	    movw $0x002D, (%rbp,%r14,8)
-	card_create_label.locB:
+	movslq %eax,              %r8
+	addq   %r8,              %rbp
+	movw   $0x002D, (%rbp,%r14,8)
 	
 	movq  fetch_firerate_ptr(%rip), %r9
 	testq %r9, %r9
-	je    card_create_label.locC
-		movq  $0x0020002000200020, %rax
-		movq  %rax, (%rbp)
+	je    card_create_label.locB
+		movq   $0x0020002000200020, %rax
+		movq   %rax, (%rbp)
 		movslq CardUI.theSeedType(%rbx), %rcx
-		cmpl   $1160, %ecx
-		ja     card_create_label.locC
+		cmpl   $1192,  %ecx
+		ja     card_create_label.locB
 			call  *%r9 #doesn't affect %r8
 			imull $9,   %eax,    %eax
 			shrl  $8,            %eax
 			leaq  indicator_lut(%rip), %rcx
 			movq  (%rcx,%rax,8), %rcx
 			movq  %rcx,        (%rbp)
-	card_create_label.locC:
+	card_create_label.locB:
 	
 	movq  fetch_cooldown_ptr(%rip), %r9
 	testq %r9, %r9
-	je    card_create_label.locD
+	je    card_create_label.locC
 		movq   $0x0020002000200020, %rax
 		movq   %rax, -8(%rbp,%r14,8)
 		movslq CardUI.theSeedType(%rbx), %rcx
 		call   *%r9 #doesn't affect %r8
-		testl  %eax, %eax
-		js     card_create_label.locD
+		testl  %eax,            %eax
+		js     card_create_label.locC
 			imull $9,   %eax,      %eax
 			shrl  $8,              %eax
 			leaq  indicator_lut(%rip), %rcx
 			movq  (%rcx,%rax,8),   %rcx
 			movq  %rcx, -8(%rbp,%r14,8)
-	card_create_label.locD:
+	card_create_label.locC:
 	
 	movl %esi,          %ecx
 	leaq 0x30(%rsp),    %rsi
