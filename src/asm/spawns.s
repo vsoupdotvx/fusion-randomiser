@@ -118,22 +118,27 @@ set_zombie_txt:
 	xorq %r8,   %r8
 	ret
 	set_zombie_txt.locA:
-	subq $0x38, %rsp
-	movl $16, %ebx
+	subq $0x48, %rsp
+	movl $66, %ebx
 	
-	movl Zombie.theZombieType(%rdi), %ecx
-	leaq zombie_weights(%rip), %rdx
-	call zombie_type_flatten
-	movl (%rdx,%rax,4), %ecx
-	leaq 0x20(%rsp),    %rdx
-	call int_2_string_fast
-	addl %eax,          %ebx
-	movl %eax,          %ebp
+	movl  Zombie.theZombieType(%rdi), %ecx
+	leaq  zombie_weights(%rip), %rdx
+	call  zombie_type_flatten
+	movl  (%rdx,%rax,4),     %ecx
+	movq  %rcx,        0x40(%rsp)
+	movss 0x200(%rdx,%rax), %xmm0
+	leaq  0x30(%rsp),        %rcx
+	call  float_2_string_4sf_0t3xp
+	movq  0x40(%rsp),        %rcx
+	leaq  0x20(%rsp),        %rdx
+	call  int_2_string_fast
+	addl  %eax,              %ebx
+	movl  %eax,              %ebp
 	
 	movl   %ebx, %ecx
 	shrl   $1,   %ecx
 	call   "System::String::FastAllocateString(length: i32) -> String"
-	movq   %rdi, 0x30(%rsp)
+	movq   %rdi, 0x40(%rsp)
 	movq   %rax, %rdi
 	xorl   %ecx, %ecx
 	call   "System.Runtime.CompilerServices::RuntimeHelpers::get_OffsetToStringData() -> i32"
@@ -153,15 +158,24 @@ set_zombie_txt:
 	
 	rep movsb
 	
+	leaq average_txt(%rip), %rsi
+	movb $20,                %cl
+	rep  movsw
+	
+	movq 0x40(%rsp), %rax
+	stosq
+	movl 0x48(%rsp), %eax
+	stosw
+	
 	popq %rsi
 	popq %rax
-	movq 0x30(%rsp), %rdi
-	addq $0x40,      %rsp
+	movq 0x40(%rsp), %rdi
+	addq $0x50,      %rsp
 	
 	movq %rsi, 0x38(%rsp)
 	movq %r14, 0x30(%rsp)
 	movq Zombie.healthText(%rdi), %r14
-	jmp "Zombie::UpdateHealthText(&mut self)"+0x337
+	jmp  "Zombie::UpdateHealthText(&mut self)"+0x337
 
 int_2_string_fast:
 	pxor     %xmm2,             %xmm2
@@ -200,11 +214,102 @@ int_2_string_fast:
 	paddw  const8x0x30(%rip), %xmm4
 	movdqu %xmm4,            (%rdx)
 	ret
+
+float_2_string_4sf_0t3xp: #2 sigfigs, 0-3 (decimal) exponent
+	xorl    %edx,              %edx
+	ucomiss const100.0(%rip), %xmm0
+	jc float_2_string_4sf_0t3xp.locA
+		ucomiss const1000.0(%rip), %xmm0
+		setnc   %dl
+		addb    $2,                  %dl
+	jmp float_2_string_4sf_0t3xp.locB
+	float_2_string_4sf_0t3xp.locA:
+		ucomiss const10.0(%rip), %xmm0
+		setnc   %dl
+	float_2_string_4sf_0t3xp.locB:
 	
+	leaq   float_2_string_4sf_0t3xp.lutA(%rip), %rax
+	movdqa const4x10.0(%rip), %xmm2
+	movdqa float_2_string_4sf_0t3xp.constA(%rip), %xmm3
+	cmpb   $3,            %dl
+	jne    float_2_string_4sf_0t3xp.locC
+		movdqa float_2_string_4sf_0t3xp.constB(%rip), %xmm3
+	float_2_string_4sf_0t3xp.locC:
+	mulss    (%rax,%rdx,4),     %xmm0
+	leaq     float_2_string_4sf_0t3xp.lutB(%rip), %rax
+	shll     $4,                 %edx
+	addss    const0.5(%rip),    %xmm0
+	pshufd   $0x00,   %xmm0,    %xmm1
+	mulss    card_create_label.constB(%rip), %xmm1
+	roundps  $3,     %xmm1,     %xmm1
+	mulps    %xmm1,             %xmm2
+	psrldq   $4,                %xmm2
+	subps    %xmm2,             %xmm1
+	cvtps2dq %xmm1,             %xmm1
+	paddd    const4x0x30(%rip), %xmm1
+	packssdw %xmm3,             %xmm1
+	pshufb   (%rax,%rdx),       %xmm1
+	movdqa   %xmm1,            (%rcx)
+	ret
 
 .section .data
+const4x0x30:
+	.long 0x30
+	.long 0x30
+	.long 0x30
+	.long 0x30
+float_2_string_4sf_0t3xp.constA:
+	.long 0
+	.long 0
+	.long 0
+	.long 0x2E
+float_2_string_4sf_0t3xp.constB:
+	.long 0
+	.long 0
+	.long 0
+	.long 0x2C
+float_2_string_4sf_0t3xp.lutA:
+	const1000.0:
+		.float 1000.0
+	const100.0:
+		.float 100.0
+	const10.0:
+		.float 10.0
+	.float 1.0
+float_2_string_4sf_0t3xp.lutB:
+	.word  0x0100
+	.word  0x0F0E
+	.word  0x0302
+	.word  0x0504
+	.word  0x0706
+	.space 0x6, 0x8
+	.word  0x0100
+	.word  0x0302
+	.word  0x0F0E
+	.word  0x0504
+	.word  0x0706
+	.space 0x6, 0x8
+	.word  0x0100
+	.word  0x0302
+	.word  0x0504
+	.word  0x0F0E
+	.word  0x0706
+	.space 0x6, 0x8
+	.word  0x0100
+	.word  0x0F0E
+	.word  0x0302
+	.word  0x0504
+	.word  0x0706
+	.space 0x6, 0x8
+const0.5:
+	.float 0.5
+average_txt:
+	.ascii "\n\0A\0v\0e\0r\0a\0g\0e\0 \0f\0r\0e\0q\0u\0e\0n\0c\0y\0:\0 \0"
+.align 16
 zombie_spawn_bitfield: #size: 46 + 19 + 24 = 89
 	.quad 0xFFFFAFFFFFFFFFFF
 	.quad 0x7FFFFFF
 zombie_weights:
+	.space 512, 0x0
+zombie_freqs:
 	.space 512, 0x0
