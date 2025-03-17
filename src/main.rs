@@ -69,7 +69,13 @@ fn main() {
     let spawns_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/spawns.o")));
     let tweaks_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/tweaks.o")));
     
-    let mut fusion = FusionProcess::new(connect).unwrap();
+    let mut fusion = loop {
+        if let Ok(process) = FusionProcess::new(connect) {
+            break process;
+        }
+        println!("Could not find a running instance of PVZ fusion, retrying in 5 seconds.");
+        sleep(Duration::new(5, 0));
+    };
     let mut dumper = IL2CppDumper::initialize(&fusion.files_dir).unwrap();
     
     if let Some(out_dir) = out_dir {
