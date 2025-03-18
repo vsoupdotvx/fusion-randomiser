@@ -1334,7 +1334,7 @@ impl RandomisationData {
                     }
                     
                     if can_firepower {
-                        for solution in if level.level_type == LevelType::Roof {vec![
+                        for solution in if level.level_type != LevelType::Roof {vec![
                             vec![
                                 Unlockable::Peashooter,
                                 Unlockable::TorchWood,
@@ -1830,6 +1830,7 @@ impl RandomisationData {
                                         }
                                     }
                                 }
+                                remove_idxs.sort_unstable();
                                 for i in remove_idxs.iter().rev() {
                                     zombies.remove(*i);
                                 }
@@ -2026,7 +2027,10 @@ impl RandomisationData {
                     }
                     *byte ^= 1 << bit_pos;
                     let idx = bit_pos as usize + byte_idx * 8;
-                    let weight_mul = 10f64.powf(Self::weight_curve(weights_rng.next_u32()));
+                    let mut weight_mul = 10f64.powf(Self::weight_curve(weights_rng.next_u32()));
+                    if idx == 0 {
+                        weight_mul = weight_mul.max(1.0);
+                    }
                     vec.push((idx as u32, (weight_mul * zombie_data[idx].default_weight as f64).round() as u32));
                     if zombie_data[idx].is_odyssey {
                         still_blacklist = true;
