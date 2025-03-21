@@ -119,6 +119,29 @@ set_zombie_txt:
 	ret
 	set_zombie_txt.locA:
 	subq $0x48, %rsp
+	
+	movq Zombie.healthText(%rdi), %rbx
+	movq %rbx, %rcx
+	movb $1,    %dl
+	call "TMPro::TMP_Text::set_enableAutoSizing(&mut self, value: bool)"
+	movq  %rbx, %rcx
+	movss zombie_menu_text_size(%rip), %xmm1
+	call  "TMPro::TMP_Text::set_fontSizeMin(&mut self, value: f32)"
+	movq  %rbx, %rcx
+	movss zombie_menu_text_size(%rip), %xmm1
+	call  "TMPro::TMP_Text::set_fontSizeMax(&mut self, value: f32)"
+	
+	movq Zombie.healthTextShadow(%rdi), %rbx
+	movq %rbx, %rcx
+	movb $1,    %dl
+	call "TMPro::TMP_Text::set_enableAutoSizing(&mut self, value: bool)"
+	movq  %rbx, %rcx
+	movss zombie_menu_text_size(%rip), %xmm1
+	call  "TMPro::TMP_Text::set_fontSizeMin(&mut self, value: f32)"
+	movq  %rbx, %rcx
+	movss zombie_menu_text_size(%rip), %xmm1
+	call  "TMPro::TMP_Text::set_fontSizeMax(&mut self, value: f32)"
+	
 	movl $68, %ebx
 	
 	movl  Zombie.theZombieType(%rdi), %ecx
@@ -303,6 +326,8 @@ float_2_string_4sf_0t3xp.lutB:
 	.space 0x6, 0x8
 const0.5:
 	.float 0.5
+zombie_menu_text_size:
+	.float 2.0
 average_txt:
 	.ascii "\n\0A\0v\0e\0r\0a\0g\0e\0 \0#\0 \0i\0n\0 \0l\0e\0v\0e\0l\0:\0 \0"
 .align 16
