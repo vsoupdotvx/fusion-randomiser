@@ -1,5 +1,4 @@
 #![cfg_attr(target_os = "linux", feature(unix_socket_ancillary_data))]
-#![cfg_attr(target_os = "linux", feature(anonymous_pipe))]
 use std::{collections::HashMap, env, path::PathBuf, str::FromStr, sync::Arc, thread::sleep, time::Duration};
 
 use data::init_defaults_from_dump;

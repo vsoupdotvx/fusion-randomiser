@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
-use std::{fs::{canonicalize, File, OpenOptions, read_dir, read_to_string}, io::{Read, IoSliceMut}, os::unix::net::UnixStream, path::Path, pipe::{PipeReader, PipeWriter}};
+use std::{fs::{canonicalize, File, OpenOptions, read_dir, read_to_string}, io::{Read, IoSliceMut}, os::unix::net::UnixStream, path::Path, io::{PipeReader, PipeWriter}};
 use object::{Object, ObjectSection};
 #[cfg(target_os = "windows")]
 use windows::{
@@ -346,7 +346,7 @@ impl FusionProcess {
     
     #[cfg(target_os = "linux")]
     fn find_process_linux(_connect: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        use std::{os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, pipe};
+        use std::{os::{fd::{AsRawFd, FromRawFd}, unix::{fs::FileExt, net::{AncillaryData, SocketAncillary, UnixStream}}}, io};
         
         use smallvec::SmallVec;
         
@@ -464,8 +464,8 @@ impl FusionProcess {
         //let mut wineserver_socket = None;
         //let mut request_pipe = None;
         //let mut request_offset_table = None;
-        let (mut reply_pipe_r, reply_pipe_w) = pipe::pipe()?;
-        let (wait_pipe_r, wait_pipe_w)       = pipe::pipe()?;
+        let (mut reply_pipe_r, reply_pipe_w) = io::pipe()?;
+        let (wait_pipe_r, wait_pipe_w)       = io::pipe()?;
         //let mut fusion_handle = Some(u32::MAX);
         
         let mut wineserver_socket = UnixStream::connect(wineserver_socket_path)?;

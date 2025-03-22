@@ -20,7 +20,7 @@ use std::{
             UnixStream,
         },
     },
-    pipe::{
+    io::{
         PipeReader,
         PipeWriter,
     },
