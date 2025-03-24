@@ -2,6 +2,7 @@
 use std::{collections::HashMap, env, path::PathBuf, str::FromStr, sync::Arc, thread::sleep, time::Duration};
 
 use data::init_defaults_from_dump;
+use fxhash::FxHashMap;
 use il2cppdump::IL2CppDumper;
 use logic::RandomisationData;
 use patcher::Patch;
@@ -122,7 +123,7 @@ fn main() {
     
     let mut initialized  = false;
     let mut mem_read_vec = Vec::new();
-    let mut fuse_map: HashMap<u32,[u32;2]> = HashMap::new();
+    let mut fuse_map: FxHashMap<u32,[u32;2]> = HashMap::default();
     let mut rand_data: Option<RandomisationData> = None;
     loop {
         sleep(Duration::from_millis(10));

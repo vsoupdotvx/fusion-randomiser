@@ -82,7 +82,7 @@ struct FrequencyCacheKey {
 type Solutions = Box<[Box<[Unlockable]>]>;
 
 impl RandomisationData {
-    pub fn no_restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &HashMap<u32,[u32;2]>) -> Self {
+    pub fn no_restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &FxHashMap<u32,[u32;2]>) -> Self {
         let plant_ids     = Self::get_plant_ids(meta);
         let level_order   = Self::randomise_level_order_no_restrictions(seed);
         let plant_order   = Self::randomise_plant_order_no_restrictions(seed);
@@ -189,7 +189,7 @@ impl RandomisationData {
         ret
     }
     
-    fn randomise_firerates_no_restrictions(seed: u64, plant_ids: &[u32], fuse_data: &HashMap<u32,[u32;2]>) -> Vec<u8> {
+    fn randomise_firerates_no_restrictions(seed: u64, plant_ids: &[u32], fuse_data: &FxHashMap<u32,[u32;2]>) -> Vec<u8> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("plant_firerates")));
         
         let mut ret = vec![0u8; plant_ids.len()];
@@ -334,8 +334,8 @@ impl RandomisationData {
         ret
     }
     
-    fn set_fusion_firerates(firerates: &mut [u8], plant_ids: &[u32], fuse_data: &HashMap<u32,[u32;2]>) {
-        let mut plant_lookup: HashMap<u32,u32> = HashMap::with_capacity(plant_ids.len());
+    fn set_fusion_firerates(firerates: &mut [u8], plant_ids: &[u32], fuse_data: &FxHashMap<u32,[u32;2]>) {
+        let mut plant_lookup: FxHashMap<u32,u32> = HashMap::with_capacity_and_hasher(plant_ids.len(), BuildHasherDefault::default());
         
         for (i, plant_id) in plant_ids.iter().enumerate() {
             plant_lookup.insert(*plant_id, i as u32);
@@ -343,8 +343,8 @@ impl RandomisationData {
         
         fn get_fused_firerate(
             fuse_plants: [u32;2],
-            plant_lookup: &HashMap<u32,u32>,
-            fuse_data: &HashMap<u32,[u32; 2]>,
+            plant_lookup: &FxHashMap<u32,u32>,
+            fuse_data: &FxHashMap<u32,[u32; 2]>,
             firerates: &[u8],
             recursion: u32,
         ) -> u8 {
@@ -422,7 +422,7 @@ impl RandomisationData {
         (plant_map, plant_ids, rev_map)
     }
     
-    fn randomise_plant_attrs(&mut self, meta: &IL2CppDumper, fuse_data: &HashMap<u32,[u32;2]>, seed: u64) {
+    fn randomise_plant_attrs(&mut self, meta: &IL2CppDumper, fuse_data: &FxHashMap<u32,[u32;2]>, seed: u64) {
         let (plant_map, plant_ids, rev_map) = Self::get_plant_map_and_ids(meta);
         
         let mut cost_rng      = ChaCha8Rng::seed_from_u64(seed ^ hash_str("plant_cost"));
@@ -975,6 +975,21 @@ impl RandomisationData {
         let solutions = Self::get_solutions_all();
         
         let mut used_solutions: FxHashMap<Solutions, u32> = HashMap::with_capacity_and_hasher(64, BuildHasherDefault::default());
+        
+        {
+            let basic_dps = vec![ //makes sure there is a single okay firepower plant
+                vec![Unlockable::Peashooter].into_boxed_slice(),
+                vec![Unlockable::SmallPuff].into_boxed_slice(),
+                vec![Unlockable::FumeShroom].into_boxed_slice(),
+                vec![Unlockable::ScaredyShroom, Unlockable::DoomShroom].into_boxed_slice(),
+                vec![Unlockable::ThreePeater].into_boxed_slice(),
+                vec![Unlockable::Cactus, Unlockable::DoomShroom].into_boxed_slice(),
+                vec![Unlockable::StarFruit].into_boxed_slice(),
+                vec![Unlockable::Cabbagepult].into_boxed_slice(),
+                vec![Unlockable::Melonpult].into_boxed_slice(),
+            ].into_boxed_slice();
+            self.is_any_solution_satisfied(&basic_dps, level, &mut used_solutions, 3);
+        }
         
         if level.conveyor_plants.is_some() {
             
@@ -1943,7 +1958,7 @@ impl RandomisationData {
         }
     }
     
-    pub fn restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &HashMap<u32,[u32;2]>) -> Self {
+    pub fn restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &FxHashMap<u32,[u32;2]>) -> Self {
         #[allow(static_mut_refs)]
         let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
         #[allow(static_mut_refs)]
