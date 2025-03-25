@@ -19,7 +19,6 @@ pub mod process;
 pub mod util;
 pub mod data;
 pub mod logic;
-pub mod fast_map;
 
 enum AppState {
     Disconnected,

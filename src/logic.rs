@@ -4,7 +4,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use smallvec::SmallVec;
-use crate::{data::{LevelData, LevelType, Unlockable, ZombieLanes, LEVEL_DATA}, fast_map::FastMap, il2cppdump::IL2CppDumper, util::hash_str};
+use crate::{data::{LevelData, LevelType, Unlockable, ZombieLanes, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
 use crate::data::ZOMBIE_DATA;
 
 pub struct RandomisationData {
@@ -748,50 +748,30 @@ impl RandomisationData {
                 spawns_lut.push(vec);
             }
             
-            let mut odds_old: FastMap = FastMap::with_size(256, spawn_vec.len() as u32);
-            odds_old.insert_probability(&vec![0u16; spawn_vec.len()], 1f64, wave * 5 / 3);
+            let total_wavepoints = wave as usize * 5 / 3;
             let mut zombie_odds: Vec<f64> = vec![0f64; spawn_vec.len()];
-            let mut loss_mul = 1f64;
+            let mut wavepoint_odds_array = vec![0f64; total_wavepoints];
+            wavepoint_odds_array[total_wavepoints - 1] = 1f64;
             
-            loop {
-                let mut odds: FastMap = FastMap::with_size(odds_old.len(), spawn_vec.len() as u32);
-                
-                for (zombies, (chance_1, remaining_points)) in &mut odds_old {
-                    for (i, chance_2) in spawns_lut[usize::min(remaining_points as usize, spawns_lut.len()) - 1].iter().enumerate() {
-                        let chance = chance_1 * *chance_2;
-                        let choice_wavepoints = spawn_vec[i].2 as isize;
-                        let mut zombies = zombies.to_vec(); //this is somehow faster than using an array and memcpying it, i guess through stack allocation?
-                        zombies[i] += 1;
-                        if remaining_points > choice_wavepoints {
-                            if chance > 1f64 / 16_777_216f64 {
-                                odds.insert_probability(&zombies, chance, remaining_points - choice_wavepoints);
-                            } else {
-                                loss_mul -= chance;
-                            }
-                        } else {
-                            for (cnt, current_odds) in zombies.iter().zip(zombie_odds.iter_mut()) {
-                                *current_odds += *cnt as f64 * chance;
-                            }
-                        }
+            for remaining_points in (1..=total_wavepoints).rev() {
+                let chance_1 = wavepoint_odds_array[remaining_points - 1];
+                for (chance_2, ((_, _, choice_wavepoints), choice_odds)) in
+                    spawns_lut[usize::min(remaining_points, spawns_lut.len()) - 1]
+                    .iter()
+                    .zip(spawn_vec.iter().zip(zombie_odds.iter_mut()))
+                {
+                    let chance = chance_1 * *chance_2;
+                    *choice_odds += chance;
+                    if remaining_points > *choice_wavepoints as usize {
+                        wavepoint_odds_array[remaining_points - *choice_wavepoints as usize - 1] += chance;
                     }
                 }
-                
-                if odds.is_empty() {
-                    break;
-                }
-                
-                odds_old = odds;
-            }
-            
-            loss_mul = 1f64 / loss_mul;
-            for chance in zombie_odds.iter_mut() {
-                *chance *= loss_mul;
             }
             
             zombie_odds
         }
         
-        let processed_waves: Vec<isize> = vec![1, 2, 3, 5, 9, 10, 16];
+        let processed_waves: Vec<isize> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
         let wave_max = level_data[level - 1].flags? as isize * 10;
         let mut freq_array = vec![f32::NAN; wave_max as usize * spawn_vec.len()];
         
