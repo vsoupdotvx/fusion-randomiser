@@ -10,6 +10,13 @@ rand_chacha = "0.9.0"
 rand = "0.9.0"
 smallvec = "1.13.2"
 fxhash = "0.2.1"
+eframe = { version="0.31.1", features=[
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+egui-file-dialog = "0.9.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gettid = "0.1.3"
