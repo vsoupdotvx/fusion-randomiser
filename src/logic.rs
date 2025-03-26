@@ -263,7 +263,7 @@ impl RandomisationData {
                     _ => continue
                 }
             }
-            if zombie.is_odyssey && level_true_idx <= 30 {
+            if (zombie.is_odyssey && level_true_idx <= 30) || zombie.is_banned {
                 continue;
             }
             

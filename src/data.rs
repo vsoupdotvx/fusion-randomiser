@@ -24,6 +24,7 @@ pub struct ZombieData {
     pub can_hypno:      bool, //from direct hypno, not hypno scaredy/fume/wallnut
     pub is_metal:       bool,
     pub is_odyssey:     bool,
+    pub is_banned:      bool,
 }
 
 #[derive(PartialEq, Eq)]
@@ -102,6 +103,7 @@ impl Default for ZombieData {
             is_metal: false,
             can_hypno: true,
             is_odyssey: false,
+            is_banned:  false,
         }
     }
 }
@@ -979,6 +981,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             id_name: "ZombieType::SuperGargantuar",
             default_weight: 500,
             default_points: 10,
+            is_banned: true,
             is_odyssey: true,
             can_hypno: false,
             ..ZombieData::default()
