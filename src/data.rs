@@ -1198,7 +1198,6 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             is_odyssey: true,
-            is_metal: true, //UNTESTED
             ..ZombieData::default()
         },
         ZombieData { //CD
