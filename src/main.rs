@@ -381,12 +381,59 @@ impl eframe::App for App {
                             }
                         }
                     });
-                    ui.horizontal(|ui| {
-                        ui.add_enabled(!self.submitted, egui::Checkbox::new(&mut self.cfg.firerates_enabled, "Random firerates"));
-                        ui.add_enabled(!self.submitted, egui::Checkbox::new(&mut self.cfg.costs_enabled, "Random costs"));
-                        ui.add_enabled(!self.submitted, egui::Checkbox::new(&mut self.cfg.cooldowns_enabled, "Random cooldowns"));
-                        ui.add_enabled(!self.submitted, egui::Checkbox::new(&mut self.cfg.spawns_enabled, "Random zombies"));
-                        ui.add_enabled(!self.submitted, egui::Checkbox::new(&mut self.cfg.tweaks_enabled, "Balance tweaks"));
+                    ui.horizontal_wrapped(|ui| {
+                        if self.submitted {ui.disable();}
+                        let layout = ui.layout().clone().with_main_justify(true).with_main_align(Align::Min);
+                        let size: egui::Vec2 = [135.0, 20.0].into();
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.firerates_enabled, "Random firerates").on_hover_ui(|ui| {
+                                ui.label("Random firerates randomises the firerates of plants.
+This will display a number between 1 and 9 on the seed packet, with 1 being the worst firerate and 9 being the best.
+If both this and random cooldowns are enabled, this will be the first number.
+The range of randomisation is between halved firerate and doubled firerate.
+For fusions of plants, the firerate is the average of it's parents.");
+                            });
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.costs_enabled, "Random costs").on_hover_ui(|ui| {
+                                ui.label("Random costs randomises the costs of plants.
+The range of randomisation is between halved cost and doubled cost.");
+                            });
+                            
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.cooldowns_enabled, "Random cooldowns").on_hover_ui(|ui| {
+                                ui.label("Random cooldowns randomises the cooldowns of plants.
+This will display a number between 1 and 9 on the seed packet, with 1 being the worst cooldown and 9 being the best.
+If both this and random firerates are enabled, this will be the second number.
+The range of randomisation is between halved cooldown and doubled cooldown.");
+                            });
+                            
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.spawns_enabled, "Random zombies").on_hover_ui(|ui| {
+                                ui.label("Random zombies randomises which zombies spawn in each level and their weights (the likelihood of each type of zombie to spawn).
+Most of the really hard zombies are only allowed to spawn starting on level 31.
+The range of randomisation is between 0.1x weight and 10x weight, with heavy bias towards changing less.");
+                            });
+                            
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.tweaks_enabled, "Balance tweaks").on_hover_ui(|ui| {
+                                ui.label("Balance tweaks changes certain things for the balance of the randomiser.
+This currently does nothing except makes the entire almanac unlocked from the beginning.
+More will likely be added in the future.");
+                            });
+                            
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.restrictions, "Restrictions").on_hover_ui(|ui| {
+                                ui.label("Restrictions adds restrictions on the randomisation to make the game possible to beat.
+Without restrictions, you can get water levels with no water solutions, 4 flag roof levels with no pot, dark michael spam on your second level, etc.
+Highly recommended.");
+                            });
+                            
+                        });
                     });
                 });
             }
@@ -402,49 +449,10 @@ impl eframe::App for App {
 
 fn main() {
     let mut native_options = eframe::NativeOptions::default();
-    native_options.viewport = native_options.viewport.with_min_inner_size([1024., 768.]);
+    native_options.viewport = native_options.viewport.with_min_inner_size([800., 600.]);
     eframe::run_native(
         concat!("PVZ Fusion Randomiser ", env!("CARGO_PKG_VERSION")),
         native_options,
         Box::new(|cc| Ok(Box::new(App::new(cc))))
     ).unwrap();
-    
-    //let seed = 0;//hash_str(&seed_string);
-    //println!("Seed: \"{seed_string}\"");
-    
-    //let mut fusion = loop {
-    //    if let Ok(process) = FusionProcess::new(connect) {
-    //        break process;
-    //    }
-    //    println!("Could not find a running instance of PVZ fusion, retrying in 5 seconds.");
-    //    sleep(Duration::new(5, 0));
-    //};
-    //let mut dumper = IL2CppDumper::initialize(&fusion.files_dir).unwrap();
-    //
-    //if let Some(out_dir) = out_dir {
-    //    let out_path = match PathBuf::from_str(&out_dir) {
-    //        Ok(path) => path,
-    //        Err(err) => panic!("Error while parsing path: {err}")
-    //    };
-    //    if out_path.is_dir() {
-    //        let dump_arc = Arc::new(dumper);
-    //        
-    //        match dump_arc.output_disasm(out_path.clone().join("out.s")) {
-    //            Ok(())  => println!("Successfully output disasm"),
-    //            Err(()) => println!("Failed to output disasm"),
-    //        }
-    //        
-    //        match dump_arc.output_structs(out_path.clone().join("out_structs.rs")) {
-    //            Ok(())  => println!("Successfully output structs"),
-    //            Err(()) => println!("Failed to output structs"),
-    //        }
-    //        
-    //        dumper = Arc::into_inner(dump_arc).unwrap();
-    //    } else {
-    //        panic!("Output path \"{}\" is not a directory!", out_path.to_string_lossy());
-    //    }
-    //}
-    
-    
-    
 }
