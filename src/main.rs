@@ -364,6 +364,7 @@ impl App {
         let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
         Line::new(points)
             .name(zombie_data[idx as usize].name)
+            .width(5.)
     }
 }
 
@@ -519,10 +520,13 @@ Highly recommended.");
                             }
                             stage += 1;
                         }
-                        ui.label(format!("{}-{}", world, stage));
+                        ui.label(RichText::new(format!("{}-{}", world, stage)).size(56.));
+                        
+                        let legend = Legend::default()
+                            .position(egui_plot::Corner::LeftTop);
                         
                         let plot = Plot::new("Wave composition")
-                            .legend(Legend::default())
+                            .legend(legend)
                             .show_axes(true)
                             .show_grid(true)
                             .allow_zoom(true);
