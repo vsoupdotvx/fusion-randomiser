@@ -65,8 +65,8 @@ enum Problem {
 
 #[allow(dead_code)]
 #[derive(Clone)]
-struct FrequencyData {
-    raw_averages: Vec<f32>,
+pub struct FrequencyData {
+    pub raw_averages: Vec<f32>,
     max_frequency: FxHashMap<u32, (f32, u32)>,
     first_flag_totals: FxHashMap<u32, f32>,
     first_wave_occurence_avgs: FxHashMap<u32, u32>,
@@ -748,7 +748,7 @@ impl RandomisationData {
                 spawns_lut.push(vec);
             }
             
-            let total_wavepoints = wave as usize * 5 / 3;
+            let total_wavepoints = (wave as usize * 5 / 3) * if wave % 10 == 0 {2} else {1};
             let mut zombie_odds: Vec<f64> = vec![0f64; spawn_vec.len()];
             let mut wavepoint_odds_array = vec![0f64; total_wavepoints];
             wavepoint_odds_array[total_wavepoints - 1] = 1f64;
@@ -771,18 +771,18 @@ impl RandomisationData {
             zombie_odds
         }
         
-        let processed_waves: Vec<isize> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
+        //let processed_waves: Vec<isize> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
         let wave_max = level_data[level - 1].flags? as isize * 10;
         let mut freq_array = vec![f32::NAN; wave_max as usize * spawn_vec.len()];
         
-        for wave in processed_waves.iter().take_while(|wave| **wave <= wave_max) {
-            let spawn_data = if *wave < 10 {&spawn_vec_pre_10} else {spawn_vec};
-            let zombie_freq = compute_freq_for_wave(spawn_data, *wave);
-            if *wave < 10 {
-                let off = spawn_vec.len() * (*wave as usize - 1);
+        for wave in 1 ..= wave_max {//processed_waves.iter().take_while(|wave| **wave <= wave_max) {
+            let spawn_data = if wave < 10 {&spawn_vec_pre_10} else {spawn_vec};
+            let zombie_freq = compute_freq_for_wave(spawn_data, wave);
+            if wave < 10 {
+                let off = spawn_vec.len() * (wave as usize - 1);
                 for dst in freq_array
                     .iter_mut()
-                    .skip(spawn_vec.len() * (*wave as usize - 1))
+                    .skip(spawn_vec.len() * (wave as usize - 1))
                     .take(spawn_vec.len()) {
                     *dst = 0f32;
                 }
@@ -792,7 +792,7 @@ impl RandomisationData {
             } else {
                 for (dst, src) in freq_array
                     .iter_mut()
-                    .skip(spawn_vec.len() * (*wave as usize - 1))
+                    .skip(spawn_vec.len() * (wave as usize - 1))
                     .take(spawn_vec.len())
                     .zip(zombie_freq.iter()) {
                     *dst = *src as f32;
@@ -800,45 +800,45 @@ impl RandomisationData {
             }
         }
         
-        for wave in 1 .. wave_max as usize {
-            let dst_off = wave * spawn_vec.len();
-            if freq_array[dst_off].is_nan() {
-                let point = processed_waves.partition_point(|pwave| *pwave < wave as isize + 1);
-                let wave1 = processed_waves[point - 1] as usize - 1;
-                let src1_off = wave1 * spawn_vec.len();
-                let mul1 = (wave * 5 / 3) as f32 / (wave1 * 5 / 3) as f32;
-                if point == processed_waves.len() {
-                    for (dst, src1) in (dst_off .. dst_off + spawn_vec.len()).zip(src1_off .. src1_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
-                        freq_array[dst] = freq_array[src1] * mul1;
-                    }
-                } else {
-                    let wave2 = processed_waves[point] as usize - 1;
-                    let src2_off = wave2 * spawn_vec.len();
-                    let mul2 = (wave * 5 / 3) as f32 / (wave2 * 5 / 3) as f32;
-                    for ((dst, src1), src2) in
-                        (dst_off .. dst_off + spawn_vec.len())
-                        .zip(src1_off .. src1_off + spawn_vec.len())
-                        .zip(src2_off .. src2_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
-                        freq_array[dst] = (freq_array[src1] * mul1 + freq_array[src2] * mul2) * 0.5;
-                    }
-                }
-            }
-        }
+        //for wave in 1 .. wave_max as usize {
+        //    let dst_off = wave * spawn_vec.len();
+        //    if freq_array[dst_off].is_nan() {
+        //        let point = processed_waves.partition_point(|pwave| *pwave < wave as isize + 1);
+        //        let wave1 = processed_waves[point - 1] as usize - 1;
+        //        let src1_off = wave1 * spawn_vec.len();
+        //        let mul1 = (wave * 5 / 3) as f32 / (wave1 * 5 / 3) as f32;
+        //        if point == processed_waves.len() {
+        //            for (dst, src1) in (dst_off .. dst_off + spawn_vec.len()).zip(src1_off .. src1_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
+        //                freq_array[dst] = freq_array[src1] * mul1;
+        //            }
+        //        } else {
+        //            let wave2 = processed_waves[point] as usize - 1;
+        //            let src2_off = wave2 * spawn_vec.len();
+        //            let mul2 = (wave * 5 / 3) as f32 / (wave2 * 5 / 3) as f32;
+        //            for ((dst, src1), src2) in
+        //                (dst_off .. dst_off + spawn_vec.len())
+        //                .zip(src1_off .. src1_off + spawn_vec.len())
+        //                .zip(src2_off .. src2_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
+        //                freq_array[dst] = (freq_array[src1] * mul1 + freq_array[src2] * mul2) * 0.5;
+        //            }
+        //        }
+        //    }
+        //}
         
-        for wave in [9, 19, 29, 39].into_iter().take_while(|wave| *wave <= wave_max) {
-            if wave == 9 && wave_max >= 20 {
-                let src_off = spawn_vec.len() * 19;
-                let dst_off = spawn_vec.len() * 9;
-                for (dst, src) in (dst_off .. dst_off + spawn_vec.len()).zip(src_off .. src_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
-                    freq_array[dst] = freq_array[src];
-                }
-            } else {
-                let off = spawn_vec.len() * wave as usize;
-                for avg_zombies in freq_array.iter_mut().skip(off).take(spawn_vec.len()) {
-                    *avg_zombies *= 2f32;
-                }
-            }
-        }
+        //for wave in [9, 19, 29, 39].into_iter().take_while(|wave| *wave <= wave_max) {
+        //    if wave == 9 && wave_max >= 20 {
+        //        let src_off = spawn_vec.len() * 19;
+        //        let dst_off = spawn_vec.len() * 9;
+        //        for (dst, src) in (dst_off .. dst_off + spawn_vec.len()).zip(src_off .. src_off + spawn_vec.len()) { //have to use indices to prevent mutable borrow + immutable borrow
+        //            freq_array[dst] = freq_array[src];
+        //        }
+        //    } else {
+        //        let off = spawn_vec.len() * wave as usize;
+        //        for avg_zombies in freq_array.iter_mut().skip(off).take(spawn_vec.len()) {
+        //            *avg_zombies *= 2f32;
+        //        }
+        //    }
+        //}
         
         let mut max_frequency = HashMap::default();
         let mut first_flag_totals = HashMap::default();
@@ -852,7 +852,7 @@ impl RandomisationData {
             let mut total_freq_ff = 0f32;
             let mut first_wave    = 0;
             for (freq, j) in freq_array.iter().skip(i).step_by(spawn_vec.len()).zip(1..) {
-                let freq_mul = if j % 10 == 9 {0.5} else {1.0};
+                let freq_mul = if j % 10 == 0 {0.5} else {1.0};
                 if *freq * freq_mul > max_freq {
                     max_freq = *freq;
                     max_wave = j;
@@ -883,7 +883,7 @@ impl RandomisationData {
         })
     }
     
-    fn compute_zombie_freq_data_cached(&mut self, level_spawns: &[(u32,u32)], level: usize) -> Option<FrequencyData> {
+    pub fn compute_zombie_freq_data_cached(&mut self, level_spawns: &[(u32,u32)], level: usize) -> Option<FrequencyData> {
         let key = FrequencyCacheKey {
             spawns: level_spawns.into(),
             level,
@@ -899,16 +899,20 @@ impl RandomisationData {
         
         spawn_vec.sort_by_key(|(_, _, points)| *points);
         
-        let frequency_cache = &mut self.restrictions_data.as_mut().unwrap().frequency_cache;
-        if let Some(entry) = frequency_cache.get(&key) {
-            return Some(entry.clone());
-        }
-        
-        if let Some(freq_data) = Self::compute_zombie_freq_data(&spawn_vec, level) {
-            frequency_cache.insert(key, freq_data.clone());
-            Some(freq_data)
+        if let Some(restrictions_data) = &mut self.restrictions_data.as_mut() {
+            let frequency_cache = &mut restrictions_data.frequency_cache;
+            if let Some(entry) = frequency_cache.get(&key) {
+                return Some(entry.clone());
+            }
+            
+            if let Some(freq_data) = Self::compute_zombie_freq_data(&spawn_vec, level) {
+                frequency_cache.insert(key, freq_data.clone());
+                Some(freq_data)
+            } else {
+                None
+            }
         } else {
-            None
+            Self::compute_zombie_freq_data(&spawn_vec, level)
         }
     }
     

@@ -1,9 +1,10 @@
 #![cfg_attr(target_os = "linux", feature(unix_socket_ancillary_data))]
 use std::{collections::HashMap, env, path::PathBuf, sync::{mpsc::{self, Receiver, Sender}, Arc}, thread::{self, sleep, JoinHandle}, time::Duration};
 
-use data::init_defaults_from_dump;
+use data::{init_defaults_from_dump, LevelType, LEVEL_DATA, ZOMBIE_DATA};
 use eframe::egui::{self, Align, Context, RichText};
 use egui_file_dialog::FileDialog;
+use egui_plot::{Legend, Line, Plot};
 use fxhash::FxHashMap;
 use il2cppdump::IL2CppDumper;
 use logic::RandomisationData;
@@ -23,10 +24,12 @@ pub mod logic;
 enum AppState {
     Disconnected,
     OptionsMenu,
+    InGame,
 }
 
 enum AsmEvent {
     Init,
+    LevelInfo(LevelUiData),
 }
 
 enum AppEvent {
@@ -53,12 +56,19 @@ struct FusionData {
     arx:         Receiver<AsmEvent>,
 }
 
+struct LevelUiData {
+    level: usize,
+    zombies: Vec<u32>,
+    wave_data: Vec<f32>,
+}
+
 struct App {
-    state:       AppState,
-    file_dialog: FileDialog,
-    fusion_data: Option<FusionData>,
-    submitted:   bool,
-    cfg:         Cfg,
+    state:         AppState,
+    file_dialog:   FileDialog,
+    fusion_data:   Option<FusionData>,
+    level_ui_data: Option<LevelUiData>,
+    submitted:     bool,
+    cfg:           Cfg,
 }
 
 impl App {
@@ -71,6 +81,7 @@ impl App {
             file_dialog: FileDialog::new(),
             fusion_data: None,
             submitted:  false,
+            level_ui_data: None,
             cfg: Cfg {
                 firerates_enabled: true,
                 costs_enabled: true,
@@ -283,30 +294,76 @@ impl App {
             }
             
             {
-                let rand_data = unsafe { rand_data.as_ref().unwrap_unchecked() };
+                let rand_data = unsafe { rand_data.as_mut().unwrap_unchecked() };
                 if let Some(cooldowns) = &rand_data.cooldowns {
                     fusion.write_memory(*sym_tab.get("plant_cd_table").unwrap(), &cooldowns[level_idx as usize]).unwrap();
                 }
                 if let Some(costs) = &rand_data.costs {
                     fusion.write_memory(*sym_tab.get("plant_cost_table").unwrap(), &costs[level_idx as usize]).unwrap();
                 }
-                if let Some(spawns) = &rand_data.spawns {
-                    fusion.write_memory(*sym_tab.get("zombie_spawn_bitfield").unwrap(), &spawns[level_idx as usize]).unwrap();
-                }
-                if let Some(freqs) = &rand_data.freqs {
-                    fusion.write_memory(*sym_tab.get("zombie_freqs").unwrap(), &freqs[level_idx as usize]).unwrap();
-                }
-                if let Some(weights) = &rand_data.weights {
-                    fusion.write_memory(*sym_tab.get("zombie_weights").unwrap(), &weights[level_idx as usize]).unwrap();
-                }
+                let spawn_vec = if cfg.spawns_enabled {
+                    if let Some(spawns) = &rand_data.spawns {
+                        fusion.write_memory(*sym_tab.get("zombie_spawn_bitfield").unwrap(), &spawns[level_idx as usize]).unwrap();
+                    } else {
+                        unreachable!()
+                    }
+                    if let Some(freqs) = &rand_data.freqs {
+                        fusion.write_memory(*sym_tab.get("zombie_freqs").unwrap(), &freqs[level_idx as usize]).unwrap();
+                    } else {
+                        unreachable!()
+                    }
+                    if let Some(weights) = &rand_data.weights {
+                        fusion.write_memory(*sym_tab.get("zombie_weights").unwrap(), &weights[level_idx as usize]).unwrap();
+                    }
+                    let mut spawn_vec: Vec<(u32,u32)> = Vec::new();
+                    let spawns = &rand_data.spawns.as_ref().unwrap()[level_idx as usize];
+                    for (i, bytes) in rand_data.weights.as_ref().unwrap()[level_idx as usize].chunks_exact(4).enumerate() {
+                        if spawns[i >> 3] & (1 << (i & 7)) != 0 {
+                            spawn_vec.push((i as u32, u32::from_le_bytes(bytes.try_into().unwrap())));
+                        }
+                    }
+                    
+                    spawn_vec
+                } else {
+                    Vec::new() //TODO
+                };
+                
                 if let Some(firerates) = &rand_data.firerates {
                     fusion.write_memory(*sym_tab.get("plant_firerate_table").unwrap(), &firerates[level_idx as usize]).unwrap();
                 }
+                
+                #[allow(static_mut_refs)]
+                let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+                let freq_data = rand_data.compute_zombie_freq_data_cached(&spawn_vec, rand_data.level_order[level_idx as usize] as usize).unwrap();
+                let mut zombies: Vec<u32> = spawn_vec.into_iter().map(|(id, _)| id).collect();
+                let wave_data = freq_data.raw_averages;
+                zombies.sort_by_key(|idx| zombie_data[*idx as usize].default_points);
+                
+                ptx.send(AsmEvent::LevelInfo(LevelUiData {
+                    level: rand_data.level_order[level_idx as usize] as usize,
+                    zombies,
+                    wave_data,
+                })).unwrap();
             }
             
             fusion.write_memory(wait_addr, &[0]).unwrap();
         }
         println!("Closed on level {}", level_idx + 1);
+    }
+    
+    fn zombie_data_line<'a>(&self, idx: usize, idx_idx: usize) -> Line<'a> {
+        let ui_data = self.level_ui_data.as_ref().unwrap();
+        let points: Vec<[f64;2]> = ui_data.wave_data
+            .iter()
+            .skip(idx_idx)
+            .step_by(ui_data.zombies.len())
+            .enumerate()
+            .map(|(x, y)| [(x + 1) as f64, *y as f64])
+            .collect();
+        #[allow(static_mut_refs)]
+        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+        Line::new(points)
+            .name(zombie_data[idx as usize].name)
     }
 }
 
@@ -325,12 +382,15 @@ impl eframe::App for App {
         self.try_send_to_poll_thread(AppEvent::Ping);
         if let Some(data) = self.fusion_data.as_mut() {
             loop {
-                if let Ok(_msg) = data.arx.try_recv() {
-                    //match msg {
-                    //    AsmEvent::Init => {
-                    //        data.atx.send(AppEvent::Conf(self.cfg.clone())).unwrap();
-                    //    }
-                    //}
+                if let Ok(msg) = data.arx.try_recv() {
+                    match msg {
+                        AsmEvent::Init => {
+                            self.state = AppState::InGame;
+                        }
+                        AsmEvent::LevelInfo(info) => {
+                            self.level_ui_data = Some(info);
+                        }
+                    }
                 } else {
                     break;
                 }
@@ -435,6 +495,45 @@ Highly recommended.");
                             
                         });
                     });
+                });
+            }
+            
+            AppState::InGame => {
+                egui::CentralPanel::default().show(ctxt, |ui| {
+                    ui.style_mut().text_styles.get_mut(&egui::TextStyle::Body).unwrap().size = 20.;
+                    if let Some(level_ui_data) = self.level_ui_data.as_ref() {
+                        #[allow(static_mut_refs)]
+                        let level_data = unsafe {LEVEL_DATA.as_ref()}.unwrap();
+                        let level_type = level_data[level_ui_data.level - 1].level_type;
+                        let world = match level_type {
+                            LevelType::Day => 1,
+                            LevelType::Night => 2,
+                            LevelType::Pool => 3,
+                            LevelType::Fog => 4,
+                            LevelType::Roof => 5,
+                        };
+                        let mut stage = 1;
+                        for level in level_data[0 .. level_ui_data.level - 1].iter().rev() {
+                            if level.level_type != level_type {
+                                break;
+                            }
+                            stage += 1;
+                        }
+                        ui.label(format!("{}-{}", world, stage));
+                        
+                        let plot = Plot::new("Wave composition")
+                            .legend(Legend::default())
+                            .show_axes(true)
+                            .show_grid(true)
+                            .allow_zoom(true);
+                        
+                        plot.show(ui, |plot_ui| {
+                            for (idx_idx, idx) in level_ui_data.zombies.iter().enumerate() {
+                                let line = self.zombie_data_line(*idx as usize, idx_idx);
+                                plot_ui.line(line);
+                            }
+                        });
+                    }
                 });
             }
         }
