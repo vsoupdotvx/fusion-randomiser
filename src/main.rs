@@ -99,20 +99,22 @@ impl App {
     }
     
     fn attempt_to_find_fusion(&mut self, ctxt: &Context) {
-        if let Ok(fusion) = FusionProcess::new(true) {
-            let ctxt = ctxt.clone();
-            let (ptx, arx) = mpsc::channel();
-            let (atx, prx) = mpsc::channel();
-            let poll_thread = thread::spawn(move || {
+        let ctxt = ctxt.clone();
+        let (ptx, arx) = mpsc::channel();
+        let (atx, prx) = mpsc::channel();
+        let poll_thread = thread::spawn(move || {
+            if let Ok(fusion) = FusionProcess::new(true) {
                 Self::poll_thread(ctxt, prx, ptx, fusion);
-            });
-            self.fusion_data = Some(FusionData {
-                poll_thread,
-                atx,
-                arx,
-            });
-            self.state = AppState::OptionsMenu;
-        }
+            } else {
+                ctxt.request_repaint();
+            }
+        });
+        self.fusion_data = Some(FusionData {
+            poll_thread,
+            atx,
+            arx,
+        });
+        self.state = AppState::OptionsMenu;
     }
     
     fn try_send_to_poll_thread(&mut self, event: AppEvent) {
