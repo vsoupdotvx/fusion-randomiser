@@ -4,7 +4,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use smallvec::SmallVec;
-use crate::{data::{LevelData, LevelType, Unlockable, ZombieLanes, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
+use crate::{data::{LevelData, LevelType, Unlockable, ZombieLanes, ZombieType, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
 use crate::data::ZOMBIE_DATA;
 
 pub struct RandomisationData {
@@ -247,7 +247,7 @@ impl RandomisationData {
         let mut ret = vec![0u8; 16];
         let level = &LEVEL_DATA.get().unwrap()[level_idx - 1];
         
-        for zombie_type in &level.default_zombie_types {
+        for zombie_type in &level.default_zombie_ids {
             Self::xor_bit_in_bitfield(*zombie_type as usize, &mut ret);
         }
         
@@ -377,13 +377,13 @@ impl RandomisationData {
         ((0.43080993081*x2-0.835882783883)*x2+0.905073260073)*x+0.5 //a crude approximation of the inverse of the input polynomial
     }
     
-    fn get_zombie_map() -> FxHashMap<&'static str, u32> {
+    fn get_zombie_map() -> FxHashMap<ZombieType, u32> {
         let zombie_data = ZOMBIE_DATA.get().unwrap();
         
         let mut ret = HashMap::with_capacity_and_hasher(128, BuildHasherDefault::default());
         
         for (i, zombie) in zombie_data.iter().enumerate() {
-            ret.insert(zombie.id_name, i as u32);
+            ret.insert(zombie.zombie_type, i as u32);
         }
         
         ret
@@ -1005,31 +1005,31 @@ impl RandomisationData {
         let mut threshold_table = vec![999f32; zombie_data.len()];
         if let Some(spawn_data) = self.compute_zombie_freq_data_cached(&spawns, level_idx as usize) {
             for (zombie_type, low_threshold, high_threshold, really_high_threshold, is_yeti) in [ //high health
-                ("ZombieType::FootballZombie",0.2,0.6,3.0,false),
-                ("ZombieType::DollSilver",0.1,0.6,1.5,false),
-                ("ZombieType::DriverZombie",0.2,0.6,2.0,false),
-                ("ZombieType::SuperDriver",0.2,0.6,2.0,false),
-                ("ZombieType::SuperJackboxZombie",0.2,0.4,3.0,false),
-                ("ZombieType::SuperPogoZombie",0.1,0.8,1.5,false),
-                ("ZombieType::MachineNutZombie",0.1,1.2,2.0,false),
-                ("ZombieType::SnowZombie",0.2,1.0,4.0,true),
-                ("ZombieType::IronPeaZombie",0.1,0.8,2.0,false),
-                ("ZombieType::TallNutFootballZombie",0.1,0.8,1.5,false),
-                ("ZombieType::TallIceNutZombie",0.3,0.8,1.5,false),
-                ("ZombieType::CherryCatapultZombie",0.1,0.8,1.5,false),
-                ("ZombieType::IronPeaDoorZombie",0.1,0.4,0.5,false),
-                ("ZombieType::JalaSquashZombie",0.05,0.4,0.5,false),
-                ("ZombieType::GatlingFootballZombie",0.05,0.4,0.5,false),
-                ("ZombieType::SuperSubmarine",0.05,0.4,0.5,false),
-                ("ZombieType::JacksonDriver",0.025,0.2,0.25,false),
-                ("ZombieType::FootballDrown",0.1,0.8,1.5,false),
-                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.5,false),
-                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.5,false),
-                ("ZombieType::ObsidianImpZombie",0.1,0.8,1.5,false),
-                ("ZombieType::DiamondRandomZombie",0.025,0.2,0.25,false),
-                ("ZombieType::DrownpultZombie",0.1,0.8,1.5,false),
+                (ZombieType::FootballZombie,0.2,0.6,3.0,false),
+                (ZombieType::DollSilver,0.1,0.6,1.5,false),
+                (ZombieType::DriverZombie,0.2,0.6,2.0,false),
+                (ZombieType::SuperDriver,0.2,0.6,2.0,false),
+                (ZombieType::SuperJackboxZombie,0.2,0.4,3.0,false),
+                (ZombieType::SuperPogoZombie,0.1,0.8,1.5,false),
+                (ZombieType::MachineNutZombie,0.1,1.2,2.0,false),
+                (ZombieType::SnowZombie,0.2,1.0,4.0,true),
+                (ZombieType::IronPeaZombie,0.1,0.8,2.0,false),
+                (ZombieType::TallNutFootballZombie,0.1,0.8,1.5,false),
+                (ZombieType::TallIceNutZombie,0.3,0.8,1.5,false),
+                (ZombieType::CherryCatapultZombie,0.1,0.8,1.5,false),
+                (ZombieType::IronPeaDoorZombie,0.1,0.4,0.5,false),
+                (ZombieType::JalaSquashZombie,0.05,0.4,0.5,false),
+                (ZombieType::GatlingFootballZombie,0.05,0.4,0.5,false),
+                (ZombieType::SuperSubmarine,0.05,0.4,0.5,false),
+                (ZombieType::JacksonDriver,0.025,0.2,0.25,false),
+                (ZombieType::FootballDrown,0.1,0.8,1.5,false),
+                (ZombieType::JackboxJumpZombie,0.05,0.4,0.5,false),
+                (ZombieType::SuperMachineNutZombie,0.05,0.4,0.5,false),
+                (ZombieType::ObsidianImpZombie,0.1,0.8,1.5,false),
+                (ZombieType::DiamondRandomZombie,0.025,0.2,0.25,false),
+                (ZombieType::DrownpultZombie,0.1,0.8,1.5,false),
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
@@ -1145,14 +1145,14 @@ impl RandomisationData {
             }
             
             for (zombie_type, low_threshold, high_threshold, really_high_threshold) in [ //very high health
-                ("ZombieType::DollDiamond",0.05,0.8,1.5),
-                ("ZombieType::DollGold",0.1,0.8,1.5),
-                ("ZombieType::NewYearZombie",0.05,0.8,1.5),
-                ("ZombieType::BlackFootball",0.05,0.4,0.75),
-                ("ZombieType::UltimateFootballZombie",0.05,0.4,0.75),
-                ("ZombieType::JacksonDriver",0.05,0.4,0.75),
+                (ZombieType::DollDiamond,0.05,0.8,1.5),
+                (ZombieType::DollGold,0.1,0.8,1.5),
+                (ZombieType::NewYearZombie,0.05,0.8,1.5),
+                (ZombieType::BlackFootball,0.05,0.4,0.75),
+                (ZombieType::UltimateFootballZombie,0.05,0.4,0.75),
+                (ZombieType::JacksonDriver,0.05,0.4,0.75),
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
@@ -1228,26 +1228,26 @@ impl RandomisationData {
             
             for (zombie_type, low_threshold, high_threshold, really_high_threshold, max_threshold,
                 can_firepower, can_umbrella, can_cwall, can_chomper) in [ //evil death zombies
-                ("ZombieType::DancePolZombie",0.05,0.4,0.8,2.0,true,false,false,false),
-                ("ZombieType::JacksonZombie",0.05,0.4,0.8,2.0,true,false,false,true),
-                ("ZombieType::ElitePaperZombie",0.05,0.4,0.8,1.5,true,false,false,true),
-                ("ZombieType::SuperPogoZombie",0.05,0.4,0.8,2.0,true,true,false,true),
-                ("ZombieType::MachineNutZombie",0.05,0.4,0.8,1.5,true,true,false,true),
-                ("ZombieType::SnowGunZombie",0.05,0.4,0.8,1.5,true,false,false,false),
-                ("ZombieType::CherryShooterZombie",0.05,0.4,0.8,1.5,true,false,true,true),
-                ("ZombieType::SuperCherryShooterZombie",0.05,0.3,0.6,1.0,false,false,true,false),
-                ("ZombieType::CherryPaperZombie",0.05,0.4,0.8,2.0,false,false,true,true),
-                ("ZombieType::CherryCatapultZombie",0.05,0.4,0.8,1.5,true,true,false,true),
-                ("ZombieType::JalaSquashZombie",0.05,0.4,0.8,1.3,true,false,false,false),
-                ("ZombieType::JacksonDriver",0.05,0.2,0.4,0.8,false,false,false,true),
-                ("ZombieType::CherryPaperZ95",0.05,0.1,0.3,0.6,false,false,true,true),
-                ("ZombieType::QuickJacksonZombie",0.05,0.2,0.4,0.8,true,false,false,true),
-                ("ZombieType::JackboxJumpZombie",0.05,0.4,0.8,1.5,true,true,false,true),
-                ("ZombieType::SuperMachineNutZombie",0.05,0.4,0.8,1.5,true,false,false,true),
-                ("ZombieType::DolphinGatlingZombie",0.05,0.2,0.4,1.0,true,false,false,true),
-                ("ZombieType::DrownpultZombie",0.05,0.4,0.8,2.0,false,false,true,true), //idk how bad these guys are actually, but they probably belong here
+                (ZombieType::DancePolZombie,0.05,0.4,0.8,2.0,true,false,false,false),
+                (ZombieType::JacksonZombie,0.05,0.4,0.8,2.0,true,false,false,true),
+                (ZombieType::ElitePaperZombie,0.05,0.4,0.8,1.5,true,false,false,true),
+                (ZombieType::SuperPogoZombie,0.05,0.4,0.8,2.0,true,true,false,true),
+                (ZombieType::MachineNutZombie,0.05,0.4,0.8,1.5,true,true,false,true),
+                (ZombieType::SnowGunZombie,0.05,0.4,0.8,1.5,true,false,false,false),
+                (ZombieType::CherryShooterZombie,0.05,0.4,0.8,1.5,true,false,true,true),
+                (ZombieType::SuperCherryShooterZombie,0.05,0.3,0.6,1.0,false,false,true,false),
+                (ZombieType::CherryPaperZombie,0.05,0.4,0.8,2.0,false,false,true,true),
+                (ZombieType::CherryCatapultZombie,0.05,0.4,0.8,1.5,true,true,false,true),
+                (ZombieType::JalaSquashZombie,0.05,0.4,0.8,1.3,true,false,false,false),
+                (ZombieType::JacksonDriver,0.05,0.2,0.4,0.8,false,false,false,true),
+                (ZombieType::CherryPaperZ95,0.05,0.1,0.3,0.6,false,false,true,true),
+                (ZombieType::QuickJacksonZombie,0.05,0.2,0.4,0.8,true,false,false,true),
+                (ZombieType::JackboxJumpZombie,0.05,0.4,0.8,1.5,true,true,false,true),
+                (ZombieType::SuperMachineNutZombie,0.05,0.4,0.8,1.5,true,false,false,true),
+                (ZombieType::DolphinGatlingZombie,0.05,0.2,0.4,1.0,true,false,false,true),
+                (ZombieType::DrownpultZombie,0.05,0.4,0.8,2.0,false,false,true,true), //idk how bad these guys are actually, but they probably belong here
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
@@ -1412,13 +1412,13 @@ impl RandomisationData {
             }
             
             for (zombie_type, low_threshold, high_threshold) in [ //gargs
-                ("ZombieType::Gargantuar",0.1,0.6),
-                ("ZombieType::RedGargantuar",0.1,0.6),
-                ("ZombieType::IronGargantuar",0.1,0.6),
-                ("ZombieType::IronRedGargantuar",0.1,0.6),
-                ("ZombieType::SuperGargantuar",0.05,0.3),
+                (ZombieType::Gargantuar,0.1,0.6),
+                (ZombieType::RedGargantuar,0.1,0.6),
+                (ZombieType::IronGargantuar,0.1,0.6),
+                (ZombieType::IronRedGargantuar,0.1,0.6),
+                (ZombieType::SuperGargantuar,0.05,0.3),
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 let zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
@@ -1490,13 +1490,13 @@ impl RandomisationData {
             }
             
             for (zombie_type, low_threshold, high_threshold, can_blover) in [ //balloons
-                ("ZombieType::BalloonZombie",0.05,0.2,true),
-                ("ZombieType::IronBallonZombie",0.05,0.2,false),
-                ("ZombieType::IronBallonZombie2",0.05,0.2,false),
-                ("ZombieType::KirovZombie",0.05,0.2,false),
-                ("ZombieType::UltimateKirovZombie",0.05,0.2,false),
+                (ZombieType::BalloonZombie,0.05,0.2,true),
+                (ZombieType::IronBallonZombie,0.05,0.2,false),
+                (ZombieType::IronBallonZombie2,0.05,0.2,false),
+                (ZombieType::KirovZombie,0.05,0.2,false),
+                (ZombieType::UltimateKirovZombie,0.05,0.2,false),
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 let _zombie = &zombie_data[zombie_idx as usize];
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
@@ -1556,8 +1556,8 @@ impl RandomisationData {
             }
             
             {
-                let (zombie_type, low_threshold, high_threshold) = ("ZombieType::SnorkleZombie",0.1,0.45);
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let (zombie_type, low_threshold, high_threshold) = (ZombieType::SnorkleZombie,0.1,0.45);
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
                     let max_frequency = *max_frequency;
                     if max_frequency >= low_threshold {
@@ -1603,21 +1603,21 @@ impl RandomisationData {
             }
             
             for (zombie_type, true_max) in [ //I will add zombies here as needed
-                ("ZombieType::Dolphinrider",7.0),
-                ("ZombieType::SubmarineZombie",2.0), //I don't like these guys
-                ("ZombieType::BungiZombie",2.0), //its really funny when you get a bungee spam level, but it can be very problematic too
+                (ZombieType::Dolphinrider,7.0),
+                (ZombieType::SubmarineZombie,2.0), //I don't like these guys
+                (ZombieType::BungiZombie,2.0), //its really funny when you get a bungee spam level, but it can be very problematic too
             ] {
-                let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                 threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(true_max);
             }
             
             if level.level_type == LevelType::Roof && level.flags.unwrap_or(1) == 1 {
                 for (zombie_type, true_max) in [ //I will add zombies here as needed
-                    ("ZombieType::PogoZombie",2.0),
-                    ("ZombieType::SuperPogoZombie",0.8),
-                    ("ZombieType::JackboxJumpZombie",0.8),
+                    (ZombieType::PogoZombie,2.0),
+                    (ZombieType::SuperPogoZombie,0.8),
+                    (ZombieType::JackboxJumpZombie,0.8),
                 ] {
-                    let zombie_idx = *zombie_map.get(zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type}\""));
+                    let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
                     threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(true_max);
                 }
             }

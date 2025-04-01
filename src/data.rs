@@ -14,7 +14,7 @@ pub enum ZombieLanes {
 }
 
 pub struct ZombieData {
-    pub id_name:        &'static str,
+    pub zombie_type:    ZombieType,
     pub name:           &'static str,
     pub allowed_lanes:  ZombieLanes,
     pub default_weight: u32,
@@ -35,6 +35,104 @@ pub enum LevelType {
     Pool,
     Fog,
     Roof,
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum ZombieType {
+    NormalZombie,
+    ConeZombie,
+    PolevaulterZombie,
+    BucketZombie,
+    PaperZombie,
+    DancePolZombie,
+    DancePolZombie2,
+    DoorZombie,
+    FootballZombie,
+    JacksonZombie,
+    ZombieDuck,
+    ConeZombieDuck,
+    BucketZombieDuck,
+    SubmarineZombie,
+    ElitePaperZombie,
+    DriverZombie,
+    SnorkleZombie,
+    SuperDriver,
+    Dolphinrider,
+    DrownZombie,
+    DollDiamond,
+    DollGold,
+    DollSilver,
+    JackboxZombie,
+    BalloonZombie,
+    KirovZombie,
+    SnowDolphinrider,
+    MinerZombie,
+    IronBallonZombie,
+    SuperJackboxZombie,
+    CatapultZombie,
+    PogoZombie,
+    LadderZombie,
+    SuperPogoZombie,
+    Gargantuar,
+    RedGargantuar,
+    ImpZombie,
+    IronGargantuar,
+    IronRedGargantuar,
+    MachineNutZombie,
+    SilverZombie,
+    GoldZombie,
+    SuperGargantuar,
+    ZombieBoss,
+    BungiZombie,
+    ZombieBoss2,
+    SnowZombie,
+    NewYearZombie,
+    SnowGunZombie,
+    PeaShooterZombie,
+    CherryShooterZombie,
+    SuperCherryShooterZombie,
+    WallNutZombie,
+    CherryPaperZombie,
+    RandomZombie,
+    BucketNutZombie,
+    CherryNutZombie,
+    IronPeaZombie,
+    TallNutFootballZombie,
+    RandomPlusZombie,
+    TallIceNutZombie,
+    CherryCatapultZombie,
+    DolphinPeaZombie,
+    IronPeaDoorZombie,
+    SquashZombie,
+    JalaSquashZombie,
+    JalapenoZombie,
+    GatlingFootballZombie,
+    IronBallonZombie2,
+    SuperSubmarine,
+    JacksonDriver,
+    FootballDrown,
+    CherryPaperZ95,
+    BlackFootball,
+    SuperKirov,
+    SuperBombThrower,
+    QuickJacksonZombie,
+    QingZombie,
+    JackboxJumpZombie,
+    SuperMachineNutZombie,
+    LandSubmarine,
+    UltimateGargantuar,
+    ObsidianImpZombie,
+    DolphinGatlingZombie,
+    DiamondRandomZombie,
+    DrownpultZombie,
+    SuperDancePolZombie,
+    UltimateFootballDrown,
+    UltimateMachineNutZombie,
+    UltimateFootballZombie,
+    UltimateKirovZombie,
+    UltimateJacksonDriver,
+    UltimatePaperZombie,
+    UltimateJackboxZombie,
 }
 
 #[allow(dead_code)]
@@ -86,15 +184,15 @@ pub enum Unlockable {
 pub struct LevelData {
     pub level_type: LevelType,
     pub flags: Option<u8>,
-    pub default_zombie_names: Vec<&'static str>,
-    pub default_zombie_types: Vec<u32>,
+    pub default_zombie_types: Vec<ZombieType>,
+    pub default_zombie_ids: Vec<u32>,
     pub conveyor_plants: Option<FxHashSet<Unlockable>>,
 }
 
 impl Default for ZombieData {
     fn default() -> Self {
         Self {
-            id_name: "",
+            zombie_type: ZombieType::NormalZombie,
             name: "",
             allowed_lanes: ZombieLanes::Land,
             default_weight: 0,
@@ -115,8 +213,8 @@ impl Default for LevelData {
         Self {
             level_type: LevelType::Day,
             flags: Some(1),
-            default_zombie_names: vec!["ZombieType::NormalZombie"],
-            default_zombie_types: Vec::new(),
+            default_zombie_types: vec![ZombieType::NormalZombie],
+            default_zombie_ids: Vec::new(),
             conveyor_plants: None,
         }
     }
@@ -135,299 +233,299 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..Default::default()
         },
         LevelData { //2
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
             ],
             ..Default::default()
         },
         LevelData { //3
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
             ],
             ..Default::default()
         },
         LevelData { //4
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PolevaulterZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PolevaulterZombie,
             ],
             flags: Some(2),
             ..Default::default()
         },
         LevelData { //5
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PeaShooterZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PeaShooterZombie,
             ],
             flags: Some(2),
             ..Default::default()
         },
         LevelData { //6
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DollDiamond"
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DollDiamond,
             ],
             flags: Some(2),
             ..Default::default()
         },
         LevelData { //7
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DollDiamond",
-                "ZombieType::CherryPaperZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DollDiamond,
+                ZombieType::CherryPaperZombie,
             ],
             flags: Some(3),
             ..Default::default()
         },
         LevelData { //8
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::BucketNutZombie",
-                "ZombieType::IronPeaZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DoorZombie,
+                ZombieType::BucketNutZombie,
+                ZombieType::IronPeaZombie,
             ],
             flags: Some(3),
             ..Default::default()
         },
         LevelData { //9
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DollDiamond",
-                "ZombieType::CherryPaperZombie",
-                "ZombieType::BucketNutZombie",
-                "ZombieType::CherryNutZombie",
-                "ZombieType::PolevaulterZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DollDiamond,
+                ZombieType::CherryPaperZombie,
+                ZombieType::BucketNutZombie,
+                ZombieType::CherryNutZombie,
+                ZombieType::PolevaulterZombie,
             ],
             flags: Some(3),
             ..Default::default()
         },
         LevelData { //A
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
             ],
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //B
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::DoorZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::DoorZombie,
             ],
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //C
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::FootballZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PaperZombie,
+                ZombieType::FootballZombie,
             ],
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //D
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::FootballZombie",
-                "ZombieType::PolevaulterZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PaperZombie,
+                ZombieType::FootballZombie,
+                ZombieType::PolevaulterZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //E
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::FootballZombie",
-                "ZombieType::PolevaulterZombie",
-                "ZombieType::BucketZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PaperZombie,
+                ZombieType::FootballZombie,
+                ZombieType::PolevaulterZombie,
+                ZombieType::BucketZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //F
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::FootballZombie",
-                "ZombieType::DancePolZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PaperZombie,
+                ZombieType::FootballZombie,
+                ZombieType::DancePolZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //10
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::FootballZombie",
-                "ZombieType::DancePolZombie",
-                "ZombieType::JacksonZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PaperZombie,
+                ZombieType::FootballZombie,
+                ZombieType::DancePolZombie,
+                ZombieType::JacksonZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //11
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::TallNutFootballZombie",
-                "ZombieType::DancePolZombie",
-                "ZombieType::JacksonZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PaperZombie,
+                ZombieType::TallNutFootballZombie,
+                ZombieType::DancePolZombie,
+                ZombieType::JacksonZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //12
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::TallNutFootballZombie",
-                "ZombieType::DollDiamond",
-                "ZombieType::TallIceNutZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::FootballZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PaperZombie,
+                ZombieType::TallNutFootballZombie,
+                ZombieType::DollDiamond,
+                ZombieType::TallIceNutZombie,
+                ZombieType::DoorZombie,
+                ZombieType::FootballZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Night,
             ..Default::default()
         },
         LevelData { //13
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
             ],
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //14
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::FootballZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::FootballZombie,
             ],
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //15
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::SnorkleZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::SnorkleZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //16
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PolevaulterZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::SubmarineZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PolevaulterZombie,
+                ZombieType::PaperZombie,
+                ZombieType::SubmarineZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //17
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::SubmarineZombie",
-                "ZombieType::DriverZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PaperZombie,
+                ZombieType::SubmarineZombie,
+                ZombieType::DriverZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //18
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::SubmarineZombie",
-                "ZombieType::SuperDriver",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DoorZombie,
+                ZombieType::SubmarineZombie,
+                ZombieType::SuperDriver,
             ],
             flags: Some(3),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //19
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::SubmarineZombie",
-                "ZombieType::SuperDriver",
-                "ZombieType::DrownZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DoorZombie,
+                ZombieType::SubmarineZombie,
+                ZombieType::SuperDriver,
+                ZombieType::DrownZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //1A
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::SubmarineZombie",
-                "ZombieType::SuperDriver",
-                "ZombieType::DrownZombie",
-                "ZombieType::DriverZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::SubmarineZombie,
+                ZombieType::SuperDriver,
+                ZombieType::DrownZombie,
+                ZombieType::DriverZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Pool,
             ..Default::default()
         },
         LevelData { //1B
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::Dolphinrider",
-                "ZombieType::DriverZombie",
-                "ZombieType::SubmarineZombie",
-                "ZombieType::ElitePaperZombie",
-                "ZombieType::DrownZombie",
-                "ZombieType::SuperDriver",
-                "ZombieType::SnorkleZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::Dolphinrider,
+                ZombieType::DriverZombie,
+                ZombieType::SubmarineZombie,
+                ZombieType::ElitePaperZombie,
+                ZombieType::DrownZombie,
+                ZombieType::SuperDriver,
+                ZombieType::SnorkleZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Pool,
@@ -444,109 +542,109 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..Default::default()
         },
         LevelData { //1C
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
             ],
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //1D
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::JackboxZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::JackboxZombie,
             ],
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //1E
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::BalloonZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PaperZombie,
+                ZombieType::BalloonZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //1F
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PaperZombie",
-                "ZombieType::BalloonZombie",
-                "ZombieType::DoorZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PaperZombie,
+                ZombieType::BalloonZombie,
+                ZombieType::DoorZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //20
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::JackboxZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::KirovZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::JackboxZombie,
+                ZombieType::BucketZombie,
+                ZombieType::KirovZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //21
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::JackboxZombie",
-                "ZombieType::BalloonZombie",
-                "ZombieType::PolevaulterZombie",
-                "ZombieType::MinerZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::JackboxZombie,
+                ZombieType::BalloonZombie,
+                ZombieType::PolevaulterZombie,
+                ZombieType::MinerZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //22
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::JackboxZombie",
-                "ZombieType::BalloonZombie",
-                "ZombieType::MinerZombie",
-                "ZombieType::SnowDolphinrider",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::JackboxZombie,
+                ZombieType::BalloonZombie,
+                ZombieType::MinerZombie,
+                ZombieType::SnowDolphinrider,
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //23
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::BucketNutZombie",
-                "ZombieType::KirovZombie",
-                "ZombieType::SuperJackboxZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::DoorZombie,
+                ZombieType::BucketNutZombie,
+                ZombieType::KirovZombie,
+                ZombieType::SuperJackboxZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
             ..Default::default()
         },
         LevelData { //24
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::JackboxZombie",
-                "ZombieType::BalloonZombie",
-                "ZombieType::MinerZombie",
-                "ZombieType::SnowDolphinrider",
-                "ZombieType::KirovZombie",
-                "ZombieType::SuperJackboxZombie",
-                "ZombieType::IronBallonZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::JackboxZombie,
+                ZombieType::BalloonZombie,
+                ZombieType::MinerZombie,
+                ZombieType::SnowDolphinrider,
+                ZombieType::KirovZombie,
+                ZombieType::SuperJackboxZombie,
+                ZombieType::IronBallonZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
@@ -564,107 +662,107 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..Default::default()
         },
         LevelData { //25
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
             ],
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //26
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::PogoZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::PogoZombie,
             ],
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //27
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //28
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::BucketNutZombie",
-                "ZombieType::DoorZombie",
-                "ZombieType::LadderZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::BucketNutZombie,
+                ZombieType::DoorZombie,
+                ZombieType::LadderZombie,
             ],
             flags: Some(2),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //29
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::LadderZombie",
-                "ZombieType::CatapultZombie",
-                "ZombieType::MachineNutZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::LadderZombie,
+                ZombieType::CatapultZombie,
+                ZombieType::MachineNutZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //2A
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::CatapultZombie",
-                "ZombieType::SuperPogoZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::CatapultZombie,
+                ZombieType::SuperPogoZombie,
             ],
             flags: Some(3),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //2B
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::BucketNutZombie",
-                "ZombieType::Gargantuar",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::BucketNutZombie,
+                ZombieType::Gargantuar,
             ],
             flags: Some(4),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //2C
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::BucketZombie",
-                "ZombieType::PogoZombie",
-                "ZombieType::IronGargantuar",
-                "ZombieType::CherryCatapultZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::BucketZombie,
+                ZombieType::PogoZombie,
+                ZombieType::IronGargantuar,
+                ZombieType::CherryCatapultZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Roof,
             ..Default::default()
         },
         LevelData { //2D
-            default_zombie_names: vec![
-                "ZombieType::NormalZombie",
-                "ZombieType::ConeZombie",
-                "ZombieType::CherryCatapultZombie",
-                "ZombieType::PogoZombie",
-                "ZombieType::LadderZombie",
-                "ZombieType::CatapultZombie",
-                "ZombieType::Gargantuar",
-                "ZombieType::IronGargantuar",
-                "ZombieType::SuperPogoZombie",
-                "ZombieType::MachineNutZombie",
-                "ZombieType::BungiZombie",
+            default_zombie_types: vec![
+                ZombieType::NormalZombie,
+                ZombieType::ConeZombie,
+                ZombieType::CherryCatapultZombie,
+                ZombieType::PogoZombie,
+                ZombieType::LadderZombie,
+                ZombieType::CatapultZombie,
+                ZombieType::Gargantuar,
+                ZombieType::IronGargantuar,
+                ZombieType::SuperPogoZombie,
+                ZombieType::MachineNutZombie,
+                ZombieType::BungiZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Roof,
@@ -683,7 +781,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
     
     let mut zombie_array = vec![
         ZombieData { //0
-            id_name: "ZombieType::NormalZombie",
+            zombie_type: ZombieType::NormalZombie,
             name: "Normal",
             default_weight: 4000, //weights painfully taken from InitZombieList::.cctor
             default_points: 1, //wavepoints slightly less painfully taken from jump tables in InitZombieList::AddZombieToList
@@ -691,7 +789,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //2
-            id_name: "ZombieType::ConeZombie",
+            zombie_type: ZombieType::ConeZombie,
             name: "Cone",
             default_weight: 3000,
             default_points: 2,
@@ -699,14 +797,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //3
-            id_name: "ZombieType::PolevaulterZombie",
+            zombie_type: ZombieType::PolevaulterZombie,
             name: "Vaulter",
             default_weight: 3000,
             default_points: 2,
             ..ZombieData::default()
         },
         ZombieData { //4
-            id_name: "ZombieType::BucketZombie",
+            zombie_type: ZombieType::BucketZombie,
             name: "Bucket",
             default_weight: 2000,
             default_points: 4,
@@ -715,14 +813,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //5
-            id_name: "ZombieType::PaperZombie",
+            zombie_type: ZombieType::PaperZombie,
             name: "Newspaper",
             default_weight: 3000,
             default_points: 2,
             ..ZombieData::default()
         },
         ZombieData { //6
-            id_name: "ZombieType::DancePolZombie",
+            zombie_type: ZombieType::DancePolZombie,
             name: "Michael",
             default_weight: 750,
             default_points: 6,
@@ -730,14 +828,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //7
-            id_name: "ZombieType::DancePolZombie2",
+            zombie_type: ZombieType::DancePolZombie2,
             name: "Backup dancer",
             default_weight: 0,
             default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //8
-            id_name: "ZombieType::DoorZombie",
+            zombie_type: ZombieType::DoorZombie,
             name: "Screen door",
             default_weight: 2000,
             default_points: 4,
@@ -745,7 +843,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //9
-            id_name: "ZombieType::FootballZombie",
+            zombie_type: ZombieType::FootballZombie,
             name: "Football",
             default_weight: 1500,
             default_points: 4,
@@ -753,7 +851,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //A
-            id_name: "ZombieType::JacksonZombie",
+            zombie_type: ZombieType::JacksonZombie,
             name: "Dark Michael",
             default_weight: 500,
             default_points: 10,
@@ -761,7 +859,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //B
-            id_name: "ZombieType::ZombieDuck",
+            zombie_type: ZombieType::ZombieDuck,
             name: "Ducky tube",
             default_weight: 0,
             default_points: 1,
@@ -769,7 +867,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //C
-            id_name: "ZombieType::ConeZombieDuck",
+            zombie_type: ZombieType::ConeZombieDuck,
             name: "Ducky tube cone",
             default_weight: 0,
             default_points: 1,
@@ -777,7 +875,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D
-            id_name: "ZombieType::BucketZombieDuck",
+            zombie_type: ZombieType::BucketZombieDuck,
             name: "Ducky tube bucket",
             default_weight: 0,
             default_points: 1,
@@ -786,7 +884,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //E
-            id_name: "ZombieType::SubmarineZombie",
+            zombie_type: ZombieType::SubmarineZombie,
             name: "Submarine",
             default_weight: 750,
             default_points: 7,
@@ -795,7 +893,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //F
-            id_name: "ZombieType::ElitePaperZombie",
+            zombie_type: ZombieType::ElitePaperZombie,
             name: "Book zombie",
             default_weight: 750,
             default_points: 6,
@@ -803,7 +901,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //10
-            id_name: "ZombieType::DriverZombie",
+            zombie_type: ZombieType::DriverZombie,
             name: "Zomboni",
             default_weight: 1000,
             default_points: 7,
@@ -811,7 +909,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //11
-            id_name: "ZombieType::SnorkleZombie",
+            zombie_type: ZombieType::SnorkleZombie,
             name: "Snorkle",
             default_weight: 1500,
             default_points: 3,
@@ -819,7 +917,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //12
-            id_name: "ZombieType::SuperDriver",
+            zombie_type: ZombieType::SuperDriver,
             name: "Bobsled zomboni",
             default_weight: 750,
             default_points: 7,
@@ -827,7 +925,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //13
-            id_name: "ZombieType::Dolphinrider",
+            zombie_type: ZombieType::Dolphinrider,
             name: "Dolphin",
             default_weight: 1500,
             default_points: 3,
@@ -835,14 +933,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //14
-            id_name: "ZombieType::DrownZombie",
+            zombie_type: ZombieType::DrownZombie,
             name: "Trident",
             default_weight: 1500,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //15
-            id_name: "ZombieType::DollDiamond",
+            zombie_type: ZombieType::DollDiamond,
             name: "Diamond dude",
             default_weight: 750,
             default_points: 6,
@@ -850,28 +948,28 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //16
-            id_name: "ZombieType::DollGold",
+            zombie_type: ZombieType::DollGold,
             name: "Gold guy",
             default_weight: 750,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //17
-            id_name: "ZombieType::DollSilver",
+            zombie_type: ZombieType::DollSilver,
             name: "Silver individual",
             default_weight: 750,
             default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //18
-            id_name: "ZombieType::JackboxZombie",
+            zombie_type: ZombieType::JackboxZombie,
             name: "Bwah",
             default_weight: 1500,
             default_points: 3,
             ..ZombieData::default()
         },
         ZombieData { //19
-            id_name: "ZombieType::BalloonZombie",
+            zombie_type: ZombieType::BalloonZombie,
             name: "Balloon",
             default_weight: 1500,
             default_points: 2,
@@ -879,7 +977,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1A
-            id_name: "ZombieType::KirovZombie",
+            zombie_type: ZombieType::KirovZombie,
             name: "Kirov",
             default_weight: 750,
             default_points: 7,
@@ -889,7 +987,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1B
-            id_name: "ZombieType::SnowDolphinrider",
+            zombie_type: ZombieType::SnowDolphinrider,
             name: "Yeti dolphin",
             default_weight: 1000,
             default_points: 4,
@@ -897,14 +995,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1C
-            id_name: "ZombieType::MinerZombie",
+            zombie_type: ZombieType::MinerZombie,
             name: "Miner",
             default_weight: 1500,
             default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //1D
-            id_name: "ZombieType::IronBallonZombie",
+            zombie_type: ZombieType::IronBallonZombie,
             name: "Metal balloon",
             default_weight: 1000,
             default_points: 5,
@@ -913,7 +1011,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1E
-            id_name: "ZombieType::SuperJackboxZombie",
+            zombie_type: ZombieType::SuperJackboxZombie,
             name: "Super bwah",
             default_weight: 1000,
             default_points: 5,
@@ -921,7 +1019,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1F
-            id_name: "ZombieType::CatapultZombie",
+            zombie_type: ZombieType::CatapultZombie,
             name: "Catapult",
             default_weight: 1000,
             default_points: 7,
@@ -929,7 +1027,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //20
-            id_name: "ZombieType::PogoZombie",
+            zombie_type: ZombieType::PogoZombie,
             name: "Pogo",
             default_weight: 1500,
             default_points: 4,
@@ -938,7 +1036,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //21
-            id_name: "ZombieType::LadderZombie",
+            zombie_type: ZombieType::LadderZombie,
             name: "Ladder",
             default_weight: 1500,
             default_points: 5,
@@ -946,7 +1044,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //22
-            id_name: "ZombieType::SuperPogoZombie",
+            zombie_type: ZombieType::SuperPogoZombie,
             name: "Melon pogo",
             default_weight: 1000,
             default_points: 6,
@@ -954,7 +1052,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //23
-            id_name: "ZombieType::Gargantuar",
+            zombie_type: ZombieType::Gargantuar,
             name: "Garg",
             default_weight: 750,
             default_points: 8,
@@ -962,7 +1060,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //24
-            id_name: "ZombieType::RedGargantuar",
+            zombie_type: ZombieType::RedGargantuar,
             name: "Giga garg",
             default_weight: 500,
             default_points: 8,
@@ -972,14 +1070,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //25
-            id_name: "ZombieType::ImpZombie",
+            zombie_type: ZombieType::ImpZombie,
             name: "Imp",
             default_weight: 0,
             default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //26
-            id_name: "ZombieType::IronGargantuar",
+            zombie_type: ZombieType::IronGargantuar,
             name: "Iron garg",
             default_weight: 750,
             default_points: 8,
@@ -989,7 +1087,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //27
-            id_name: "ZombieType::IronRedGargantuar",
+            zombie_type: ZombieType::IronRedGargantuar,
             name: "Giga iron garg",
             default_weight: 500,
             default_points: 8,
@@ -1000,7 +1098,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //28
-            id_name: "ZombieType::MachineNutZombie",
+            zombie_type: ZombieType::MachineNutZombie,
             name: "Zomnut",
             default_weight: 750,
             default_points: 8,
@@ -1008,21 +1106,21 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //29
-            id_name: "ZombieType::SilverZombie",
+            zombie_type: ZombieType::SilverZombie,
             name: "Silver zombie",
             default_weight: 0,
             default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2A
-            id_name: "ZombieType::GoldZombie",
+            zombie_type: ZombieType::GoldZombie,
             name: "Gold zombie",
             default_weight: 0,
             default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2B
-            id_name: "ZombieType::SuperGargantuar",
+            zombie_type: ZombieType::SuperGargantuar,
             name: "Gladiantaur",
             default_weight: 500,
             default_points: 10,
@@ -1032,42 +1130,42 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //2C
-            id_name: "ZombieType::ZombieBoss",
+            zombie_type: ZombieType::ZombieBoss,
             name: "Zomboss",
             default_weight: 0,
             default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2D
-            id_name: "ZombieType::BungiZombie", //can go on water and land, but we don't want this for logic purposes
+            zombie_type: ZombieType::BungiZombie, //can go on water and land, but we don't want this for logic purposes
             name: "Bungie",
             default_weight: 1000,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //2E
-            id_name: "ZombieType::ZombieBoss2",
+            zombie_type: ZombieType::ZombieBoss2,
             name: "Zomboss 2",
             default_weight: 0,
             default_points: 0,
             ..ZombieData::default()
         },
         ZombieData { //2F
-            id_name: "ZombieType::SnowZombie",
+            zombie_type: ZombieType::SnowZombie,
             name: "Yeti",
             default_weight: 750,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //30
-            id_name: "ZombieType::NewYearZombie",
+            zombie_type: ZombieType::NewYearZombie,
             name: "New year zombie",
             default_weight: 750,
             default_points: 8,
             ..ZombieData::default()
         },
         ZombieData { //31
-            id_name: "ZombieType::SnowGunZombie",
+            zombie_type: ZombieType::SnowGunZombie,
             name: "Snowblower",
             default_weight: 500,
             default_points: 8,
@@ -1075,14 +1173,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //64
-            id_name: "ZombieType::PeaShooterZombie",
+            zombie_type: ZombieType::PeaShooterZombie,
             name: "Peashooter zombie",
             default_weight: 1000,
             default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //65
-            id_name: "ZombieType::CherryShooterZombie",
+            zombie_type: ZombieType::CherryShooterZombie,
             name: "Cherry shooter zombie",
             default_weight: 750,
             default_points: 3,
@@ -1090,7 +1188,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //66
-            id_name: "ZombieType::SuperCherryShooterZombie",
+            zombie_type: ZombieType::SuperCherryShooterZombie,
             name: "Super cherry shooter zombie",
             default_weight: 750,
             default_points: 4,
@@ -1098,14 +1196,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //67
-            id_name: "ZombieType::WallNutZombie",
+            zombie_type: ZombieType::WallNutZombie,
             name: "Wallnut zombie",
             default_weight: 2000,
             default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //68
-            id_name: "ZombieType::CherryPaperZombie",
+            zombie_type: ZombieType::CherryPaperZombie,
             name: "Cherry paper zombie",
             default_weight: 500,
             default_points: 8,
@@ -1113,7 +1211,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //69
-            id_name: "ZombieType::RandomZombie",
+            zombie_type: ZombieType::RandomZombie,
             name: "Random zombie",
             default_weight: 1000,
             default_points: 5,
@@ -1121,7 +1219,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //6A
-            id_name: "ZombieType::BucketNutZombie",
+            zombie_type: ZombieType::BucketNutZombie,
             name: "Bucket nut zombie",
             default_weight: 1000,
             default_points: 5,
@@ -1130,14 +1228,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //6B
-            id_name: "ZombieType::CherryNutZombie",
+            zombie_type: ZombieType::CherryNutZombie,
             name: "Cherry nut zombie",
             default_weight: 2000,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //6C
-            id_name: "ZombieType::IronPeaZombie",
+            zombie_type: ZombieType::IronPeaZombie,
             name: "Iron pea zombie",
             default_weight: 500,
             default_points: 5,
@@ -1146,7 +1244,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //6D
-            id_name: "ZombieType::TallNutFootballZombie",
+            zombie_type: ZombieType::TallNutFootballZombie,
             name: "Tallnut football",
             default_weight: 1000,
             default_points: 10,
@@ -1155,7 +1253,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //6E
-            id_name: "ZombieType::RandomPlusZombie",
+            zombie_type: ZombieType::RandomPlusZombie,
             name: "Gold random",
             default_weight: 500,
             default_points: 7,
@@ -1163,14 +1261,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //6F
-            id_name: "ZombieType::TallIceNutZombie",
+            zombie_type: ZombieType::TallIceNutZombie,
             name: "Ice tallnut zombie",
             default_weight: 1000,
             default_points: 5,
             ..ZombieData::default()
         },
         ZombieData { //70
-            id_name: "ZombieType::CherryCatapultZombie",
+            zombie_type: ZombieType::CherryCatapultZombie,
             name: "Cherry catapult",
             default_weight: 750,
             default_points: 10,
@@ -1178,7 +1276,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //71
-            id_name: "ZombieType::DolphinPeaZombie",
+            zombie_type: ZombieType::DolphinPeaZombie,
             name: "Peashooter dolphin",
             default_weight: 750,
             default_points: 4,
@@ -1186,7 +1284,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //72
-            id_name: "ZombieType::IronPeaDoorZombie",
+            zombie_type: ZombieType::IronPeaDoorZombie,
             name: "Iron pea door zombie",
             default_weight: 500,
             default_points: 5,
@@ -1194,14 +1292,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //73
-            id_name: "ZombieType::SquashZombie",
+            zombie_type: ZombieType::SquashZombie,
             name: "Squash zombie",
             default_weight: 750,
             default_points: 4,
             ..ZombieData::default()
         },
         ZombieData { //74
-            id_name: "ZombieType::JalaSquashZombie",
+            zombie_type: ZombieType::JalaSquashZombie,
             name: "Jalapeno squash zombie",
             default_weight: 500,
             default_points: 8,
@@ -1209,14 +1307,14 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //75
-            id_name: "ZombieType::JalapenoZombie",
+            zombie_type: ZombieType::JalapenoZombie,
             name: "Jalapeno zombie",
             default_weight: 0,
             default_points: 1,
             ..ZombieData::default()
         },
         ZombieData { //76
-            id_name: "ZombieType::GatlingFootballZombie",
+            zombie_type: ZombieType::GatlingFootballZombie,
             name: "Gatling football",
             default_weight: 750,
             default_points: 10,
@@ -1225,7 +1323,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //77
-            id_name: "ZombieType::IronBallonZombie2", //no almanac entry, hopefully not evil
+            zombie_type: ZombieType::IronBallonZombie2, //no almanac entry, hopefully not evil
             name: "Iron pea balloon",
             default_weight: 1000,
             default_points: 5,
@@ -1233,7 +1331,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //C8
-            id_name: "ZombieType::SuperSubmarine",
+            zombie_type: ZombieType::SuperSubmarine,
             name: "Super submarine",
             default_weight: 1000,
             default_points: 5,
@@ -1243,7 +1341,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //C9
-            id_name: "ZombieType::JacksonDriver",
+            zombie_type: ZombieType::JacksonDriver,
             name: "Dark Michael zomboni",
             default_weight: 1000,
             default_points: 5,
@@ -1252,7 +1350,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CA
-            id_name: "ZombieType::FootballDrown",
+            zombie_type: ZombieType::FootballDrown,
             name: "Trident football",
             default_weight: 1000,
             default_points: 5,
@@ -1260,7 +1358,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CB
-            id_name: "ZombieType::CherryPaperZ95",
+            zombie_type: ZombieType::CherryPaperZ95,
             name: "Super cherry newspaper",
             default_weight: 1000,
             default_points: 5,
@@ -1269,7 +1367,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CC
-            id_name: "ZombieType::BlackFootball",
+            zombie_type: ZombieType::BlackFootball,
             name: "Rugby zombie",
             default_weight: 1000,
             default_points: 5,
@@ -1277,7 +1375,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CD
-            id_name: "ZombieType::SuperKirov",
+            zombie_type: ZombieType::SuperKirov,
             name: "Super kirov",
             default_weight: 1000,
             default_points: 5,
@@ -1287,7 +1385,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CE
-            id_name: "ZombieType::SuperBombThrower",
+            zombie_type: ZombieType::SuperBombThrower,
             name: "Honestly not sure what this individual is",
             default_weight: 0,
             default_points: 1,
@@ -1296,7 +1394,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //CF
-            id_name: "ZombieType::QuickJacksonZombie",
+            zombie_type: ZombieType::QuickJacksonZombie,
             name: "Bright Michael",
             default_weight: 1000,
             default_points: 5,
@@ -1304,7 +1402,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D0
-            id_name: "ZombieType::QingZombie",
+            zombie_type: ZombieType::QingZombie,
             name: "Qing zombie",
             default_weight: 1000,
             default_points: 5,
@@ -1312,7 +1410,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D1
-            id_name: "ZombieType::JackboxJumpZombie",
+            zombie_type: ZombieType::JackboxJumpZombie,
             name: "Bwah melon pogo",
             default_weight: 1000,
             default_points: 5,
@@ -1321,7 +1419,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D2
-            id_name: "ZombieType::SuperMachineNutZombie",
+            zombie_type: ZombieType::SuperMachineNutZombie,
             name: "Super zomnut",
             default_weight: 1000,
             default_points: 5,
@@ -1330,7 +1428,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D3
-            id_name: "ZombieType::LandSubmarine",
+            zombie_type: ZombieType::LandSubmarine,
             name: "Land submarine",
             default_weight: 0,
             default_points: 1,
@@ -1339,7 +1437,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D4
-            id_name: "ZombieType::UltimateGargantuar",
+            zombie_type: ZombieType::UltimateGargantuar,
             name: "Ultra garg",
             default_weight: 0,
             default_points: 10,
@@ -1348,7 +1446,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D5
-            id_name: "ZombieType::ObsidianImpZombie",
+            zombie_type: ZombieType::ObsidianImpZombie,
             name: "Obsidian imp",
             default_weight: 1000,
             default_points: 5,
@@ -1356,7 +1454,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D6
-            id_name: "ZombieType::DolphinGatlingZombie",
+            zombie_type: ZombieType::DolphinGatlingZombie,
             name: "Gatling dolphin",
             default_weight: 1000,
             default_points: 5,
@@ -1365,7 +1463,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D7
-            id_name: "ZombieType::DiamondRandomZombie",
+            zombie_type: ZombieType::DiamondRandomZombie,
             name: "Diamond random",
             default_weight: 300,
             default_points: 5,
@@ -1373,7 +1471,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D8
-            id_name: "ZombieType::DrownpultZombie",
+            zombie_type: ZombieType::DrownpultZombie,
             name: "Trident catapult",
             default_weight: 1000,
             default_points: 5,
@@ -1382,7 +1480,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //D9
-            id_name: "ZombieType::SuperDancePolZombie",
+            zombie_type: ZombieType::SuperDancePolZombie,
             name: "Honestly not sure what this guy is either",
             default_weight: 0,
             default_points: 1,
@@ -1390,7 +1488,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DA
-            id_name: "ZombieType::UltimateFootballDrown",
+            zombie_type: ZombieType::UltimateFootballDrown,
             name: "Ultra trident football",
             default_weight: 0,
             default_points: 10,
@@ -1398,7 +1496,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DB
-            id_name: "ZombieType::UltimateMachineNutZombie",
+            zombie_type: ZombieType::UltimateMachineNutZombie,
             name: "Giga super zomnut",
             default_weight: 0,
             default_points: 10,
@@ -1407,7 +1505,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DC
-            id_name: "ZombieType::UltimateFootballZombie",
+            zombie_type: ZombieType::UltimateFootballZombie,
             name: "Ultra rugby zombie",
             default_weight: 0,
             default_points: 10,
@@ -1416,7 +1514,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DD
-            id_name: "ZombieType::UltimateKirovZombie",
+            zombie_type: ZombieType::UltimateKirovZombie,
             name: "Ultra kirov",
             default_weight: 0,
             default_points: 10,
@@ -1426,7 +1524,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DE
-            id_name: "ZombieType::UltimateJacksonDriver",
+            zombie_type: ZombieType::UltimateJacksonDriver,
             name: "Jackson worldwide",
             default_weight: 0,
             default_points: 10,
@@ -1435,7 +1533,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //DF
-            id_name: "ZombieType::UltimatePaperZombie",
+            zombie_type: ZombieType::UltimatePaperZombie,
             name: "Wheelchair guy",
             default_weight: 0,
             default_points: 10,
@@ -1443,7 +1541,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //E0
-            id_name: "ZombieType::UltimateJackboxZombie",
+            zombie_type: ZombieType::UltimateJackboxZombie,
             name: "Ultra bwah",
             default_weight: 0,
             default_points: 10,
@@ -1453,25 +1551,25 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
     ];
     
     for zombie in zombie_array.iter_mut() {
-        zombie.id = match il2cpp_syms.get(zombie.id_name) {
+        zombie.id = match il2cpp_syms.get(&format!("ZombieType::{:?}", zombie.zombie_type)) {
             Some(x) => {
                 Some(*x as i32)
             },
-            None => panic!("Failed to find enum ID of {}", zombie.id_name),
+            None => panic!("Failed to find enum ID of {:?}", zombie.zombie_type),
         }
     }
     
     zombie_array.sort_unstable_by_key(|zombie| unsafe {zombie.id.unwrap_unchecked()});
     
-    let mut zombie_id_table: HashMap<&'static str, u32> = HashMap::with_capacity(zombie_array.len());
+    let mut zombie_id_table: HashMap<ZombieType, u32> = HashMap::with_capacity(zombie_array.len());
     
     for (i, zombie) in zombie_array.iter_mut().enumerate() {
-        zombie_id_table.insert(zombie.id_name, i as u32);
+        zombie_id_table.insert(zombie.zombie_type, i as u32);
     }
     
     for level in level_array.iter_mut() {
-        for zombie_name in &level.default_zombie_names {
-            level.default_zombie_types.push(*zombie_id_table.get(zombie_name).unwrap());
+        for zombie_name in &level.default_zombie_types {
+            level.default_zombie_ids.push(*zombie_id_table.get(zombie_name).unwrap());
         }
     }
     
