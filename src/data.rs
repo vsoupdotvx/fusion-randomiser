@@ -1,11 +1,11 @@
-use std::{collections::HashMap, hash::BuildHasherDefault};
+use std::{collections::HashMap, hash::BuildHasherDefault, sync::OnceLock};
 
 use fxhash::{FxHashMap, FxHashSet};
 
 use crate::il2cppdump::IL2CppDumper;
 
-pub static mut ZOMBIE_DATA: Option<Vec<ZombieData>> = None;
-pub static mut LEVEL_DATA:  Option<Vec<LevelData>>  = None;
+pub static ZOMBIE_DATA: OnceLock<Vec<ZombieData>> = OnceLock::new();
+pub static LEVEL_DATA:  OnceLock<Vec<LevelData>>  = OnceLock::new();
 
 pub enum ZombieLanes {
     Land,
@@ -1475,8 +1475,6 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         }
     }
     
-    unsafe {
-        ZOMBIE_DATA = Some(zombie_array);
-        LEVEL_DATA  = Some(level_array);
-    }
+    ZOMBIE_DATA.get_or_init(|| zombie_array);
+    LEVEL_DATA.get_or_init(|| level_array);
 }

@@ -334,8 +334,7 @@ impl App {
                     fusion.write_memory(*sym_tab.get("plant_firerate_table").unwrap(), &firerates[level_idx as usize]).unwrap();
                 }
                 
-                #[allow(static_mut_refs)]
-                let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+                let zombie_data = ZOMBIE_DATA.get().unwrap();
                 let freq_data = rand_data.compute_zombie_freq_data_cached(&spawn_vec, rand_data.level_order[level_idx as usize] as usize).unwrap();
                 let mut zombies: Vec<u32> = spawn_vec.into_iter().map(|(id, _)| id).collect();
                 let wave_data = freq_data.raw_averages;
@@ -362,8 +361,7 @@ impl App {
             .enumerate()
             .map(|(x, y)| [(x + 1) as f64, *y as f64])
             .collect();
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
         Line::new(points)
             .name(zombie_data[idx as usize].name)
             .width(5.)
@@ -505,8 +503,7 @@ Highly recommended.");
                 egui::CentralPanel::default().show(ctxt, |ui| {
                     ui.style_mut().text_styles.get_mut(&egui::TextStyle::Body).unwrap().size = 20.;
                     if let Some(level_ui_data) = self.level_ui_data.as_ref() {
-                        #[allow(static_mut_refs)]
-                        let level_data = unsafe {LEVEL_DATA.as_ref()}.unwrap();
+                        let level_data = LEVEL_DATA.get().unwrap();
                         let level_type = level_data[level_ui_data.level - 1].level_type;
                         let world = match level_type {
                             LevelType::Day => 1,

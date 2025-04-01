@@ -175,11 +175,9 @@ impl RandomisationData {
     
     fn randomise_weights_no_restrictions(seed: u64) -> Vec<u8> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("zombie_weights")));
-        #[allow(static_mut_refs)]
-        let mut ret = Vec::with_capacity(unsafe {ZOMBIE_DATA.as_ref()}.unwrap().len() * 4);
+        let mut ret = Vec::with_capacity(ZOMBIE_DATA.get().unwrap().len() * 4);
         
-        #[allow(static_mut_refs)]
-        for zombie in unsafe {ZOMBIE_DATA.as_ref()}.unwrap() {
+        for zombie in ZOMBIE_DATA.get().unwrap() {
             let weight_mul = 10f64.powf(Self::weight_curve(rng.next_u32()));
             for byte in ((weight_mul * zombie.default_weight as f64).round() as i32).to_le_bytes() {
                 ret.push(byte);
@@ -247,15 +245,13 @@ impl RandomisationData {
     fn randomise_spawns_no_restrictions(seed: u64, level_idx: usize, level_true_idx: usize) -> Vec<u8> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("zombie_spawns")));
         let mut ret = vec![0u8; 16];
-        #[allow(static_mut_refs)]
-        let level = &unsafe{LEVEL_DATA.as_ref()}.unwrap()[level_idx - 1];
+        let level = &LEVEL_DATA.get().unwrap()[level_idx - 1];
         
         for zombie_type in &level.default_zombie_types {
             Self::xor_bit_in_bitfield(*zombie_type as usize, &mut ret);
         }
         
-        #[allow(static_mut_refs)]
-        for (i, zombie) in unsafe {ZOMBIE_DATA.as_ref()}.unwrap().iter().enumerate() {
+        for (i, zombie) in ZOMBIE_DATA.get().unwrap().iter().enumerate() {
             if let ZombieLanes::Water = zombie.allowed_lanes {
                 match level.level_type {
                     LevelType::Pool |
@@ -382,8 +378,7 @@ impl RandomisationData {
     }
     
     fn get_zombie_map() -> FxHashMap<&'static str, u32> {
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
         
         let mut ret = HashMap::with_capacity_and_hasher(128, BuildHasherDefault::default());
         
@@ -692,8 +687,7 @@ impl RandomisationData {
     }
     
     fn compute_zombie_freq_data_bytes(spawns: &[u8], weights: &[u8], level: usize) -> Option<FrequencyData> {
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
         
         let mut spawn_vec: Vec<(u32, u32, u32)> = Vec::with_capacity(weights.len() >> 2);
         for (i, bytes) in weights.chunks_exact(4).enumerate() {
@@ -708,10 +702,8 @@ impl RandomisationData {
     }
     
     fn compute_zombie_freq_data(spawn_vec: &[(u32, u32, u32)], level: usize) -> Option<FrequencyData> {
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
-        #[allow(static_mut_refs)]
-        let level_data = unsafe {LEVEL_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
+        let level_data = LEVEL_DATA.get().unwrap();
         
         let mut spawn_vec_pre_10 = spawn_vec.to_vec();
         let mut pre_10_map = Vec::from_iter(0..spawn_vec.len());
@@ -889,8 +881,7 @@ impl RandomisationData {
             level,
         };
         
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
         
         let mut spawn_vec: Vec<(u32, u32, u32)> = Vec::with_capacity(level_spawns.len());
         for (idx, weight) in level_spawns.iter() {
@@ -952,10 +943,8 @@ impl RandomisationData {
     fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32, seed: u64) -> Result<(),Vec<ImpossibleReason>> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("more_plant_stuff")) ^ level_idx as u64);
         let mut ret = Vec::new();
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
-        #[allow(static_mut_refs)]
-        let level = &unsafe {LEVEL_DATA.as_ref()}.unwrap()[level_idx as usize - 1];
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
+        let level = &LEVEL_DATA.get().unwrap()[level_idx as usize - 1];
         let solutions = Self::get_solutions_all();
         
         let mut used_solutions: FxHashMap<Solutions, u32> = HashMap::with_capacity_and_hasher(64, BuildHasherDefault::default());
@@ -1943,10 +1932,8 @@ impl RandomisationData {
     }
     
     pub fn restrictions(seed: u64, meta: &IL2CppDumper, fuse_data: &FxHashMap<u32,[u32;2]>) -> Self {
-        #[allow(static_mut_refs)]
-        let zombie_data = unsafe {ZOMBIE_DATA.as_ref()}.unwrap();
-        #[allow(static_mut_refs)]
-        let level_data = unsafe {LEVEL_DATA.as_ref()}.unwrap();
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
+        let level_data = LEVEL_DATA.get().unwrap();
         
         let mut level_rng   = ChaCha8Rng::seed_from_u64(seed ^ hash_str("level_rng"));
         let mut weights_rng = ChaCha8Rng::seed_from_u64(seed ^ hash_str("zombie_weights"));
