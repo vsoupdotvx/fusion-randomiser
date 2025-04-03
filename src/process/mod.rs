@@ -411,6 +411,15 @@ impl FusionProcess {
             .join("exe");
         let mut wineserver_path = canonicalize(wine_exe_link_path)?;
         wineserver_path.set_file_name("wineserver");
+        if !wineserver_path.exists() {
+            for _ in 0..3 {
+                if !wineserver_path.pop() {
+                    return Err(Box::new(CommonError::critical("Could not find wineserver executable!")));
+                }
+            }
+            wineserver_path.push("bin");
+            wineserver_path.push("wineserver");
+        }
         
         let mut wineserver_pid = 0i32;
         
@@ -496,8 +505,8 @@ impl FusionProcess {
         let version = u32::from_ne_bytes(version_buf);
         if version < 786 {
             panic!("Wineserver protocol version is too old ({version} < 786)!\nTry upgrading wine to a version from 2024 or newer!")
-        } else if version > 855 {
-            panic!("Wineserver protocol version is too recent ({version} > 855)!\nTry downgrading wine or spam-pinging the developers on discord!")
+        } else if version > 863 {
+            panic!("Wineserver protocol version is too recent ({version} > 863)!\nTry downgrading wine or spam-pinging the developers on discord!")
         } else {
             println!("Wineserver protocol version: {version}");
         }

@@ -103,10 +103,12 @@ impl App {
         let (ptx, arx) = mpsc::channel();
         let (atx, prx) = mpsc::channel();
         let poll_thread = thread::spawn(move || {
-            if let Ok(fusion) = FusionProcess::new(true) {
-                Self::poll_thread(ctxt, prx, ptx, fusion);
-            } else {
-                ctxt.request_repaint();
+            match FusionProcess::new(true) {
+                Ok(fusion) => Self::poll_thread(ctxt, prx, ptx, fusion),
+                Err(err) => {
+                    ctxt.request_repaint();
+                    println!("{err}");
+                }
             }
         });
         self.fusion_data = Some(FusionData {

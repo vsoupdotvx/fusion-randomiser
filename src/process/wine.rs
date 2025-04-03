@@ -1,5 +1,5 @@
 //786 is the oldest supported version (i.e. the last version before 2024)
-//855 is the newest supported version
+//863 is the newest supported version
 use core::slice;
 use std::{
     fs::File,
@@ -337,6 +337,7 @@ enum Request
     ReqTerminateJob,
     ReqSuspendProcess,
     ReqResumeProcess,
+    ReqGetNextProcess, //added in 856
     ReqGetNextThread,
     ReqSetKeyboardRepeat, //added in 804
     ReqNbRequests,
@@ -367,6 +368,7 @@ pub fn get_request_offset_table_for_version(version: u32) -> Vec<u32> {
             Request::ReqGetDirectoryEntry      => 0   .. 806,      //removed in 806
             Request::ReqGrantProcessAdminToken => 853 .. u32::MAX, //added in 853
             Request::ReqGetThreadCompletion    => 845 .. u32::MAX, //added in 845
+            Request::ReqGetNextProcess         => 856 .. u32::MAX, //added in 856
             Request::ReqSetKeyboardRepeat      => 804 .. u32::MAX, //added in 804
             _                                  => 0   .. u32::MAX,
         };
