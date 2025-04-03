@@ -1,5 +1,6 @@
 use std::{collections::HashMap, hash::BuildHasherDefault, sync::OnceLock};
 
+use bitflags::bitflags;
 use fxhash::{FxHashMap, FxHashSet};
 
 use crate::il2cppdump::IL2CppDumper;
@@ -20,12 +21,24 @@ pub struct ZombieData {
     pub default_weight: u32,
     pub default_points: u32,
     pub id:             Option<i32>,
-    pub is_elite:       bool,
-    pub is_vehicle:     bool,
-    pub can_hypno:      bool, //from direct hypno, not hypno scaredy/fume/wallnut
-    pub is_metal:       bool,
-    pub is_odyssey:     bool,
-    pub is_banned:      bool,
+    pub flags:          ZombieFlags,
+}
+
+bitflags! {
+    pub struct ZombieFlags: u32 {
+        const NONE          =   0x0;
+        const IS_ELITE      =   0x1;
+        const IS_VEHICLE    =   0x2;
+        const DOES_NOT_EAT  =   0x4;
+        const IS_METAL      =   0x8;
+        const IS_ODYSSEY    =  0x10;
+        const IS_BANNED     =  0x20;
+        const HIGH_HEALTH   =  0x40;
+        const FLIES         =  0x80;
+        const V_HIGH_HEALTH = 0x100;
+        const GARG_TYPE     = 0x200;
+        const EVIL_DEATH    = 0x400;
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -198,12 +211,7 @@ impl Default for ZombieData {
             default_weight: 0,
             default_points: 1,
             id: None,
-            is_vehicle: false,
-            is_elite: false,
-            is_metal: false,
-            can_hypno: true,
-            is_odyssey: false,
-            is_banned:  false,
+            flags: ZombieFlags::NONE,
         }
     }
 }
@@ -808,7 +816,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Bucket",
             default_weight: 2000,
             default_points: 4,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -824,7 +832,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Michael",
             default_weight: 750,
             default_points: 6,
-            is_elite: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::EVIL_DEATH | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //7
@@ -839,7 +847,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Screen door",
             default_weight: 2000,
             default_points: 4,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL,
             ..ZombieData::default()
         },
         ZombieData { //9
@@ -847,7 +855,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Football",
             default_weight: 1500,
             default_points: 4,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //A
@@ -855,7 +863,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Dark Michael",
             default_weight: 500,
             default_points: 10,
-            is_elite: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::EVIL_DEATH | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //B
@@ -879,7 +887,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ducky tube bucket",
             default_weight: 0,
             default_points: 1,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
@@ -888,7 +896,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Submarine",
             default_weight: 750,
             default_points: 7,
-            can_hypno: false,
+            flags: ZombieFlags::DOES_NOT_EAT | ZombieFlags::HIGH_HEALTH,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
@@ -897,7 +905,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Book zombie",
             default_weight: 750,
             default_points: 6,
-            is_elite: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //10
@@ -905,7 +913,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Zomboni",
             default_weight: 1000,
             default_points: 7,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_VEHICLE | ZombieFlags::DOES_NOT_EAT | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //11
@@ -921,7 +929,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Bobsled zomboni",
             default_weight: 750,
             default_points: 7,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_VEHICLE | ZombieFlags::DOES_NOT_EAT | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //13
@@ -944,7 +952,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Diamond dude",
             default_weight: 750,
             default_points: 6,
-            is_elite: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::V_HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //16
@@ -952,6 +960,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Gold guy",
             default_weight: 750,
             default_points: 5,
+            flags: ZombieFlags::V_HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //17
@@ -959,11 +968,12 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Silver individual",
             default_weight: 750,
             default_points: 4,
+            flags: ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //18
             zombie_type: ZombieType::JackboxZombie,
-            name: "Bwah",
+            name: "Jack",
             default_weight: 1500,
             default_points: 3,
             ..ZombieData::default()
@@ -974,6 +984,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1500,
             default_points: 2,
             allowed_lanes: ZombieLanes::Both,
+            flags: ZombieFlags::FLIES | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //1A
@@ -981,8 +992,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Kirov",
             default_weight: 750,
             default_points: 7,
-            is_elite: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::FLIES | ZombieFlags::DOES_NOT_EAT,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -1006,16 +1016,16 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Metal balloon",
             default_weight: 1000,
             default_points: 5,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::HIGH_HEALTH | ZombieFlags::FLIES | ZombieFlags::DOES_NOT_EAT,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
         ZombieData { //1E
             zombie_type: ZombieType::SuperJackboxZombie,
-            name: "Super bwah",
+            name: "Super jack",
             default_weight: 1000,
             default_points: 5,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //1F
@@ -1023,7 +1033,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Catapult",
             default_weight: 1000,
             default_points: 7,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_VEHICLE | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //20
@@ -1031,8 +1041,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Pogo",
             default_weight: 1500,
             default_points: 4,
-            is_metal: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //21
@@ -1040,7 +1049,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ladder",
             default_weight: 1500,
             default_points: 5,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL,
             ..ZombieData::default()
         },
         ZombieData { //22
@@ -1048,7 +1057,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Melon pogo",
             default_weight: 1000,
             default_points: 6,
-            can_hypno: false,
+            flags: ZombieFlags::DOES_NOT_EAT | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //23
@@ -1056,7 +1065,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Garg",
             default_weight: 750,
             default_points: 8,
-            can_hypno: false,
+            flags: ZombieFlags::GARG_TYPE,
             ..ZombieData::default()
         },
         ZombieData { //24
@@ -1064,9 +1073,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Giga garg",
             default_weight: 500,
             default_points: 8,
-            is_odyssey: true,
-            is_elite: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::IS_ELITE | ZombieFlags::GARG_TYPE,
             ..ZombieData::default()
         },
         ZombieData { //25
@@ -1081,9 +1088,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Iron garg",
             default_weight: 750,
             default_points: 8,
-            is_elite: true,
-            can_hypno: false,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::IS_ELITE | ZombieFlags::GARG_TYPE,
             ..ZombieData::default()
         },
         ZombieData { //27
@@ -1091,10 +1096,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Giga iron garg",
             default_weight: 500,
             default_points: 8,
-            is_elite: true,
-            is_odyssey: true,
-            can_hypno: false,
-            is_metal: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::IS_ELITE | ZombieFlags::GARG_TYPE | ZombieFlags::IS_METAL,
             ..ZombieData::default()
         },
         ZombieData { //28
@@ -1102,7 +1104,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Zomnut",
             default_weight: 750,
             default_points: 8,
-            can_hypno: false,
+            flags: ZombieFlags::DOES_NOT_EAT | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //29
@@ -1124,9 +1126,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Gladiantaur",
             default_weight: 500,
             default_points: 10,
-            is_banned: true,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_BANNED | ZombieFlags::IS_ODYSSEY | ZombieFlags::GARG_TYPE,
             ..ZombieData::default()
         },
         ZombieData { //2C
@@ -1155,6 +1155,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Yeti",
             default_weight: 750,
             default_points: 5,
+            flags: ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //30
@@ -1162,6 +1163,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "New year zombie",
             default_weight: 750,
             default_points: 8,
+            flags: ZombieFlags::V_HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //31
@@ -1169,7 +1171,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Snowblower",
             default_weight: 500,
             default_points: 8,
-            is_odyssey: true, //no idea what this individual does, but they look scary in the almanac
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //64
@@ -1184,7 +1186,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Cherry shooter zombie",
             default_weight: 750,
             default_points: 3,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //66
@@ -1192,7 +1194,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Super cherry shooter zombie",
             default_weight: 750,
             default_points: 4,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //67
@@ -1207,7 +1209,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Cherry paper zombie",
             default_weight: 500,
             default_points: 8,
-            is_elite: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //69
@@ -1215,7 +1217,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Random zombie",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //6A
@@ -1223,8 +1225,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Bucket nut zombie",
             default_weight: 1000,
             default_points: 5,
-            is_elite: true,
-            is_metal: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::HIGH_HEALTH | ZombieFlags::IS_METAL,
             ..ZombieData::default()
         },
         ZombieData { //6B
@@ -1239,8 +1240,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Iron pea zombie",
             default_weight: 500,
             default_points: 5,
-            is_elite: true,
-            is_metal: true,
+            flags: ZombieFlags::IS_ELITE | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //6D
@@ -1248,8 +1248,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Tallnut football",
             default_weight: 1000,
             default_points: 10,
-            is_elite: true,
-            is_metal: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::IS_METAL | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //6E
@@ -1257,7 +1256,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Gold random",
             default_weight: 500,
             default_points: 7,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //6F
@@ -1265,6 +1264,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ice tallnut zombie",
             default_weight: 1000,
             default_points: 5,
+            flags: ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //70
@@ -1272,7 +1272,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Cherry catapult",
             default_weight: 750,
             default_points: 10,
-            is_vehicle: true,
+            flags: ZombieFlags::EVIL_DEATH | ZombieFlags::IS_VEHICLE | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //71
@@ -1288,7 +1288,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Iron pea door zombie",
             default_weight: 500,
             default_points: 5,
-            is_metal: true,
+            flags: ZombieFlags::IS_METAL | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //73
@@ -1303,7 +1303,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Jalapeno squash zombie",
             default_weight: 500,
             default_points: 8,
-            is_odyssey: true, //this guy wasn't odyssey before despite being probably the most dangerous zombie here
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //75
@@ -1318,16 +1318,15 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Gatling football",
             default_weight: 750,
             default_points: 10,
-            is_odyssey: true,
-            is_metal: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::IS_METAL | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //77
-            zombie_type: ZombieType::IronBallonZombie2, //no almanac entry, hopefully not evil
+            zombie_type: ZombieType::IronBallonZombie2,
             name: "Iron pea balloon",
             default_weight: 1000,
             default_points: 5,
-            is_metal: true,
+            flags: ZombieFlags::FLIES | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //C8
@@ -1336,8 +1335,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             default_weight: 1000,
             default_points: 5,
             allowed_lanes: ZombieLanes::Water,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::DOES_NOT_EAT | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //C9
@@ -1345,8 +1343,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Dark Michael zomboni",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH | ZombieFlags::IS_VEHICLE | ZombieFlags::DOES_NOT_EAT,
             ..ZombieData::default()
         },
         ZombieData { //CA
@@ -1354,7 +1351,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Trident football",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //CB
@@ -1362,8 +1359,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Super cherry newspaper",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //CC
@@ -1371,7 +1367,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Rugby zombie",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::V_HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //CD
@@ -1379,8 +1375,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Super kirov",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::DOES_NOT_EAT | ZombieFlags::FLIES,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -1389,8 +1384,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Honestly not sure what this individual is",
             default_weight: 0,
             default_points: 1,
-            is_odyssey: true,
-            is_vehicle: true, //sounds like a catapult type zombie, though I haven't confirmed this
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //CF
@@ -1398,7 +1392,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Bright Michael",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //D0
@@ -1406,16 +1400,15 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Qing zombie",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //D1
             zombie_type: ZombieType::JackboxJumpZombie,
-            name: "Bwah melon pogo",
+            name: "Jack melon pogo",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::DOES_NOT_EAT | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //D2
@@ -1423,8 +1416,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Super zomnut",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::DOES_NOT_EAT | ZombieFlags::EVIL_DEATH,
             ..ZombieData::default()
         },
         ZombieData { //D3
@@ -1432,8 +1424,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Land submarine",
             default_weight: 0,
             default_points: 1,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //D4
@@ -1441,8 +1432,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ultra garg",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //D5
@@ -1450,7 +1440,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Obsidian imp",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //D6
@@ -1458,7 +1448,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Gatling dolphin",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
             allowed_lanes: ZombieLanes::Water,
             ..ZombieData::default()
         },
@@ -1467,7 +1457,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Diamond random",
             default_weight: 300,
             default_points: 5,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::V_HIGH_HEALTH,
             ..ZombieData::default()
         },
         ZombieData { //D8
@@ -1475,8 +1465,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Trident catapult",
             default_weight: 1000,
             default_points: 5,
-            is_odyssey: true,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::IS_VEHICLE,
             ..ZombieData::default()
         },
         ZombieData { //D9
@@ -1484,7 +1473,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Honestly not sure what this guy is either",
             default_weight: 0,
             default_points: 1,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //DA
@@ -1492,7 +1481,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ultra trident football",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //DB
@@ -1500,8 +1489,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Giga super zomnut",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //DC
@@ -1509,8 +1497,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ultra rugby zombie",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
-            is_metal: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //DD
@@ -1518,8 +1505,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Ultra kirov",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
-            can_hypno: false,
+            flags: ZombieFlags::IS_ODYSSEY,
             allowed_lanes: ZombieLanes::Both,
             ..ZombieData::default()
         },
@@ -1528,8 +1514,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Jackson worldwide",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
-            is_vehicle: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //DF
@@ -1537,15 +1522,15 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             name: "Wheelchair guy",
             default_weight: 0,
             default_points: 10,
-            is_odyssey: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
         ZombieData { //E0
             zombie_type: ZombieType::UltimateJackboxZombie,
-            name: "Ultra bwah",
+            name: "Ultra jack",
             default_weight: 0,
             default_points: 10,
-            is_metal: true,
+            flags: ZombieFlags::IS_ODYSSEY,
             ..ZombieData::default()
         },
     ];

@@ -4,7 +4,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use smallvec::SmallVec;
-use crate::{data::{LevelData, LevelType, Unlockable, ZombieLanes, ZombieType, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
+use crate::{data::{LevelData, LevelType, Unlockable, ZombieFlags, ZombieLanes, ZombieType, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
 use crate::data::ZOMBIE_DATA;
 
 pub struct RandomisationData {
@@ -259,14 +259,14 @@ impl RandomisationData {
                     _ => continue
                 }
             }
-            if (zombie.is_odyssey && level_true_idx <= 30) || zombie.is_banned {
+            if (zombie.flags.contains(ZombieFlags::IS_ODYSSEY) && level_true_idx <= 30) || zombie.flags.contains(ZombieFlags::IS_BANNED) {
                 continue;
             }
             
             let val = rng.next_u32();
             if (ret[i >> 8] & 1 << (i & 7) as u8) == 0 {
-                if (!zombie.is_odyssey && val >= u32::MAX / 20) ||
-                    (zombie.is_odyssey && val >= u32::MAX / 60) {
+                if (!zombie.flags.contains(ZombieFlags::IS_ODYSSEY) && val >= u32::MAX / 20) ||
+                    (zombie.flags.contains(ZombieFlags::IS_ODYSSEY) && val >= u32::MAX / 60) {
                     continue;
                 }
             } else if val >= u32::MAX / 10 {
@@ -709,7 +709,7 @@ impl RandomisationData {
         let mut pre_10_map = Vec::from_iter(0..spawn_vec.len());
         
         for (i, (idx, _, _)) in spawn_vec.iter().enumerate().rev() {
-            if zombie_data[*idx as usize].is_elite {
+            if zombie_data[*idx as usize].flags.contains(ZombieFlags::IS_ELITE) {
                 spawn_vec_pre_10.remove(i);
                 pre_10_map.remove(i);
             }
@@ -1054,7 +1054,7 @@ impl RandomisationData {
                         ]
                     };
                     
-                    if !zombie.is_vehicle && zombie.can_hypno {
+                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         low_solutions.push(vec![
                             Unlockable::HypnoShroom,
                         ].into_boxed_slice());
@@ -1072,12 +1072,12 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    if !zombie.is_vehicle && zombie.can_hypno {
+                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         high_solutions.push(vec![
                             Unlockable::HypnoShroom,
                             Unlockable::SmallPuff,
                         ].into_boxed_slice());
-                    } else if zombie.is_vehicle {
+                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
                         high_solutions.push(vec![
                             Unlockable::Caltrop,
                         ].into_boxed_slice());
@@ -1106,7 +1106,7 @@ impl RandomisationData {
                         ].into_boxed_slice(),
                     ];
                     
-                    if zombie.is_vehicle {
+                    if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
                         r_high_solutions.push(vec![
                             Unlockable::Caltrop,
                             Unlockable::ThreePeater,
@@ -1117,7 +1117,7 @@ impl RandomisationData {
                         ].into_boxed_slice());
                     }
                     
-                    if zombie.is_metal {
+                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
                         r_high_solutions.push(vec![
                             Unlockable::Magnetshroom,
                         ].into_boxed_slice());
@@ -1160,7 +1160,7 @@ impl RandomisationData {
                         continue;
                     }
                     
-                    let mut low_solutions = if !zombie.is_vehicle && zombie.can_hypno {
+                    let mut low_solutions = if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         vec![vec![
                             Unlockable::HypnoShroom,
                         ].into_boxed_slice()]
@@ -1174,25 +1174,25 @@ impl RandomisationData {
                         ].into_boxed_slice(),
                     ];
                     
-                    if !zombie.is_vehicle && zombie.can_hypno {
+                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         high_solutions.push(vec![
                             Unlockable::HypnoShroom,
                             Unlockable::SmallPuff,
                         ].into_boxed_slice());
-                    } else if zombie.is_vehicle {
+                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
                         high_solutions.push(
                             vec![
                             Unlockable::Caltrop,
                         ].into_boxed_slice());
                     }
                     
-                    if zombie.is_metal {
+                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
                         high_solutions.push(vec![
                             Unlockable::Magnetshroom,
                         ].into_boxed_slice());
                     }
                     
-                    let mut r_high_solutions = if zombie.is_metal {
+                    let mut r_high_solutions = if zombie.flags.contains(ZombieFlags::IS_METAL) {
                         vec![vec![
                             Unlockable::Magnetshroom,
                             Unlockable::Plantern,
@@ -1264,7 +1264,7 @@ impl RandomisationData {
                         ].into_boxed_slice(),
                     ];
                     
-                    if !zombie.is_vehicle && zombie.can_hypno {
+                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         low_solutions.push(vec![
                             Unlockable::HypnoShroom,
                         ].into_boxed_slice());
@@ -1280,24 +1280,24 @@ impl RandomisationData {
                         Vec::new()
                     };
                     
-                    if !zombie.is_vehicle && zombie.can_hypno {
+                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
                         high_solutions.push(vec![
                             Unlockable::HypnoShroom,
                             Unlockable::SmallPuff,
                         ].into_boxed_slice());
-                    } else if zombie.is_vehicle {
+                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
                         high_solutions.push(vec![
                             Unlockable::Caltrop,
                         ].into_boxed_slice());
                     }
                     
-                    if zombie.is_metal {
+                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
                         high_solutions.push(vec![
                             Unlockable::Magnetshroom,
                         ].into_boxed_slice());
                     }
                     
-                    let mut r_high_solutions = if zombie.is_metal {vec![
+                    let mut r_high_solutions = if zombie.flags.contains(ZombieFlags::IS_METAL) {vec![
                         vec![
                             Unlockable::Magnetshroom,
                             Unlockable::Plantern,
@@ -1310,7 +1310,7 @@ impl RandomisationData {
                         Vec::new()
                     };
                     
-                    if zombie.is_vehicle {
+                    if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
                         r_high_solutions.push(vec![
                             Unlockable::Caltrop,
                             Unlockable::ThreePeater,
@@ -1467,7 +1467,7 @@ impl RandomisationData {
                         ].into_boxed_slice(),
                     ];
                     
-                    if zombie.is_metal {
+                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
                         high_solutions.push(vec![
                             Unlockable::Magnetshroom,
                         ].into_boxed_slice());
@@ -2018,7 +2018,7 @@ impl RandomisationData {
                         weight_mul = weight_mul.max(1.0);
                     }
                     vec.push((idx as u32, (weight_mul * zombie_data[idx].default_weight as f64).round() as u32));
-                    if zombie_data[idx].is_odyssey {
+                    if zombie_data[idx].flags.contains(ZombieFlags::IS_ODYSSEY) {
                         still_blacklist = true;
                     }
                 }
