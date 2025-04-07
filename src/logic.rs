@@ -93,6 +93,7 @@ struct ProblemData {
 struct SolutionEntry {
     uses:   Option<u8>,
     negate: bool,
+    night:  bool,
     weight: f32,
     plants: ArrayVec<Unlockable, 4>,
 }
@@ -101,6 +102,7 @@ impl Default for SolutionEntry {
         Self {
             uses: Some(1),
             negate: false,
+            night:  false,
             weight: 1.,
             plants: ArrayVec::new(),
         }
@@ -1411,6 +1413,12 @@ impl RandomisationData {
                         uses: None, //total guess
                         ..Default::default()
                     },
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::Chomper,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
                 ].into_boxed_slice()),
                 (ZombieType::PogoZombie, vec![
                     SolutionEntry {
@@ -1666,6 +1674,8 @@ impl RandomisationData {
     }
     
     fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32, seed: u64) -> Result<(),Vec<ImpossibleReason>> {
+        static FIREPOWER_SOLUTIONS: OnceLock<FxHashMap<u8, Box<[SolutionEntry]>>> = OnceLock::new();
+        
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("more_plant_stuff")) ^ level_idx as u64);
         let mut ret = Vec::new();
         let zombie_data = ZOMBIE_DATA.get().unwrap();
@@ -1675,18 +1685,314 @@ impl RandomisationData {
         let mut used_solutions: FxHashMap<Solutions, u32> = HashMap::with_capacity_and_hasher(64, BuildHasherDefault::default());
         
         {
-            let basic_dps = vec![ //makes sure there is a single okay firepower plant
-                vec![Unlockable::Peashooter].into_boxed_slice(),
-                vec![Unlockable::SmallPuff].into_boxed_slice(),
-                vec![Unlockable::FumeShroom].into_boxed_slice(),
-                vec![Unlockable::ScaredyShroom, Unlockable::DoomShroom].into_boxed_slice(),
-                vec![Unlockable::ThreePeater].into_boxed_slice(),
-                vec![Unlockable::Cactus, Unlockable::DoomShroom].into_boxed_slice(),
-                vec![Unlockable::StarFruit].into_boxed_slice(),
-                vec![Unlockable::Cabbagepult].into_boxed_slice(),
-                vec![Unlockable::Melonpult].into_boxed_slice(),
-            ].into_boxed_slice();
-            self.is_any_solution_satisfied(&basic_dps, level, &mut used_solutions, 3);
+            //let basic_dps = vec![ //makes sure there is a single okay firepower plant
+            //    vec![Unlockable::Peashooter].into_boxed_slice(),
+            //    vec![Unlockable::SmallPuff].into_boxed_slice(),
+            //    vec![Unlockable::FumeShroom].into_boxed_slice(),
+            //    vec![Unlockable::ScaredyShroom, Unlockable::DoomShroom].into_boxed_slice(),
+            //    vec![Unlockable::ThreePeater].into_boxed_slice(),
+            //    vec![Unlockable::Cactus, Unlockable::DoomShroom].into_boxed_slice(),
+            //    vec![Unlockable::StarFruit].into_boxed_slice(),
+            //    vec![Unlockable::Cabbagepult].into_boxed_slice(),
+            //    vec![Unlockable::Melonpult].into_boxed_slice(),
+            //].into_boxed_slice();
+            //self.is_any_solution_satisfied(&basic_dps, level, &mut used_solutions, 3);
+            
+            let firepower_solutions = FIREPOWER_SOLUTIONS.get_or_init(|| {
+                let mut firepower_solutions: FxHashMap<u8, Box<[SolutionEntry]>> = [
+                    (1, vec![
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::SmallPuff,
+                            ].into_iter().collect(),
+                            night: true,
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::FumeShroom,
+                            ].into_iter().collect(),
+                            night: true,
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ScaredyShroom,
+                            ].into_iter().collect(),
+                            night: true,
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::StarFruit,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Cabbagepult,
+                                Unlockable::Cornpult,
+                            ].into_iter().collect(),
+                            uses: None,
+                            weight: 0.5,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Cabbagepult,
+                                Unlockable::Garlic,
+                            ].into_iter().collect(),
+                            uses: None,
+                            weight: 0.5,
+                            ..Default::default()
+                        },
+                    ].into_boxed_slice()),
+                    (2, vec![
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                                Unlockable::SmallPuff,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::SmallPuff,
+                                Unlockable::StarFruit,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::FumeShroom,
+                                Unlockable::ScaredyShroom,
+                            ].into_iter().collect(),
+                            night: true,
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                                Unlockable::Squash
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                                Unlockable::TorchWood,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Cactus,
+                                Unlockable::Plantern,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Melonpult,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                    ].into_boxed_slice()),
+                    (3, vec![
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                                Unlockable::CherryBomb,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                                Unlockable::TorchWood,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                                Unlockable::SmallPuff,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                                Unlockable::Squash
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                                Unlockable::TorchWood,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::StarFruit,
+                                Unlockable::Plantern,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Cornpult,
+                                Unlockable::EndoFlame,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Melonpult,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                    ].into_boxed_slice()),
+                    (4, vec![
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Peashooter,
+                                Unlockable::TorchWood,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::ThreePeater,
+                                Unlockable::TorchWood,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::StarFruit,
+                                Unlockable::Plantern,
+                                Unlockable::Pumpkin,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Cornpult,
+                                Unlockable::EndoFlame,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Melonpult,
+                                Unlockable::Jalapeno,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                        SolutionEntry {
+                            plants: [
+                                Unlockable::Melonpult,
+                                Unlockable::Cabbagepult,
+                                Unlockable::Umbrellaleaf,
+                            ].into_iter().collect(),
+                            uses: None,
+                            ..Default::default()
+                        },
+                    ].into_boxed_slice()),
+                ].into_iter().collect();
+                
+                for val in firepower_solutions.values_mut() {
+                    for solution in val {
+                        solution.plants.sort_unstable_by_key(|x| *x as isize);
+                    }
+                }
+                
+                firepower_solutions
+            });
+            
+            let solutions = firepower_solutions.get(&level.flags.unwrap_or(4)).unwrap();
+            let mut options: SmallVec<[SolutionEntry; 8]> = SmallVec::new();
+            
+            let unlocked_plants = if let Some(conveyor_plants) = &level.conveyor_plants {
+                conveyor_plants
+            } else {
+                &self.restrictions_data.as_ref().unwrap().unlocked_plants
+            };
+            
+            'solve_loop: for solution in solutions {
+                if !solution.night || level.level_type == LevelType::Night || level.level_type == LevelType::Fog {
+                    for plant in &solution.plants {
+                        if !unlocked_plants.contains(plant) {
+                            continue 'solve_loop;
+                        }
+                    }
+                    options.push(solution.clone());
+                }
+            }
+            
+            if options.is_empty() {
+                ret.push(ImpossibleReason::FourFlag); //not necessarily the case, but who cares
+            } else {
+                let mut cumulative_weights: SmallVec<[f64; 8]> = SmallVec::new();
+                let mut total_weight = 0f64;
+                for solution in &options {
+                    cumulative_weights.push(total_weight);
+                    total_weight += solution.weight as f64;
+                }
+                assert_ne!(total_weight, 0f64);
+                let val = rng.next_u32() as f64 / 4_294_967_296. * total_weight;
+                let idx = cumulative_weights.partition_point(|csum| *csum <= val);
+                let solution = &options[idx - 1];
+                used_solutions.insert(vec![solution.plants.iter().copied().collect()].into_boxed_slice(), 3);
+            }
         }
         
         if level.conveyor_plants.is_none() {
@@ -2122,6 +2428,10 @@ impl RandomisationData {
             } else {
                 impossible_levels.push(*level_idx as usize);
             }
+        }
+        
+        if possible_levels.is_empty() {
+            panic!("These levels were impossible to satisfy: {impossible_levels:?}");
         }
         assert_ne!(possible_levels.len(), 0);
         assert_ne!(total_weight, 0f64);
