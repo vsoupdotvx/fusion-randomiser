@@ -25,6 +25,7 @@ pub struct ZombieData {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     pub struct ZombieFlags: u32 {
         const NONE          =   0x0;
         const IS_ELITE      =   0x1;
@@ -227,6 +228,15 @@ impl Default for LevelData {
         }
     }
 }
+
+pub const COOLDOWN_TABLE: [f32; 41] = [
+    7.5, 7.5, 50., 30., 30., 7.5,
+    7.5, 7.5, 30., 7.5, 50., 50.,
+    7.5, 30., 7.5, 30., 50., 7.5, 7.5,
+    7.5, 30., 7.5, 15., 7.5, 30., 7.5,
+    7.5, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5,
+    50., 50., 15., 50., 50., 50., 50., 50.,
+];
 
 pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
     let mut il2cpp_syms: FxHashMap<String, u64> = HashMap::with_capacity_and_hasher(dump.methods_array.len()*3, BuildHasherDefault::default());

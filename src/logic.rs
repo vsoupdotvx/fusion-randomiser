@@ -1,10 +1,11 @@
-use std::{collections::{HashMap, HashSet}, hash::BuildHasherDefault, mem::transmute};
+use std::{collections::{HashMap, HashSet}, hash::{BuildHasherDefault, Hash}, mem::transmute, ops::Not, sync::OnceLock};
 
+use arrayvec::ArrayVec;
 use fxhash::{FxHashMap, FxHashSet};
 use rand::RngCore;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use smallvec::SmallVec;
-use crate::{data::{LevelData, LevelType, Unlockable, ZombieFlags, ZombieLanes, ZombieType, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
+use crate::{data::{LevelData, LevelType, Unlockable, ZombieFlags, ZombieLanes, ZombieType, COOLDOWN_TABLE, LEVEL_DATA}, il2cppdump::IL2CppDumper, util::hash_str};
 use crate::data::ZOMBIE_DATA;
 
 pub struct RandomisationData {
@@ -69,6 +70,7 @@ pub struct FrequencyData {
     pub raw_averages: Vec<f32>,
     max_frequency: FxHashMap<u32, (f32, u32)>,
     first_flag_totals: FxHashMap<u32, f32>,
+    first_2_flag_max: FxHashMap<u32, f32>,
     first_wave_occurence_avgs: FxHashMap<u32, u32>,
     totals: Vec<u8>,
 }
@@ -77,6 +79,112 @@ pub struct FrequencyData {
 struct FrequencyCacheKey {
     spawns: Box<[(u32,u32)]>,
     level: usize,
+}
+
+struct ProblemData {
+    zombie_idx: u32,
+    orig_freq:  f32,
+    freq:       f32,
+    solutions:  FxHashSet<SolutionEntry>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+struct SolutionEntry {
+    uses:   Option<u8>,
+    negate: bool,
+    weight: f32,
+    plants: ArrayVec<Unlockable, 4>,
+}
+impl Default for SolutionEntry {
+    fn default() -> Self {
+        Self {
+            uses: Some(1),
+            negate: false,
+            weight: 1.,
+            plants: ArrayVec::new(),
+        }
+    }
+}
+impl Not for SolutionEntry {
+    type Output = Self;
+    fn not(mut self) -> Self::Output {
+        self.negate = !self.negate;
+        self
+    }
+}
+impl PartialEq for SolutionEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.plants == other.plants
+    }
+}
+impl Eq for SolutionEntry {}
+impl Hash for SolutionEntry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for plant in &self.plants {
+            state.write_u8(*plant as u8);
+        }
+        state.write_u32(self.weight.to_bits());
+    }
+}
+impl SolutionEntry {
+    #[allow(dead_code)]
+    fn compute_new_plant_utilization(&self, modifiers: &LevelPlants, usage_set: &mut [f32], zombie_cooldown: f32) -> f32 { //outputs zombie _frequency_
+        let solution_cooldown = self.compute_solution_cooldown(modifiers, usage_set);
+        let max_cooldown = solution_cooldown.max(zombie_cooldown);
+        if max_cooldown != f32::INFINITY {
+            let mut duplicate_set: FxHashSet<Unlockable> = FxHashSet::with_capacity_and_hasher(4, BuildHasherDefault::default());
+            for (i, plant) in self.plants.iter().copied().enumerate() {
+                for plant_2 in self.plants.iter().copied().skip(i + 1) {
+                    if plant == plant_2 {
+                        duplicate_set.insert(plant);
+                    }
+                }
+            }
+            
+            let plant_set: FxHashSet<Unlockable> = self.plants.iter().copied().collect();
+            for plant in plant_set.iter().copied() {
+                let (_, cooldown_mul) = modifiers.menu[plant as usize];
+                let mut cooldown = COOLDOWN_TABLE[plant as usize] / (1. - usage_set[plant as usize]) * mul_from_u8(cooldown_mul);
+                if plant != Unlockable::DoomShroom && !duplicate_set.contains(&plant) {
+                    cooldown *= 0.5;
+                }
+                usage_set[plant as usize] = cooldown / max_cooldown; // TODO: this math feels unsound, i was very out of it while writing this
+            }
+            
+            1. / (1. / zombie_cooldown - 1. / max_cooldown)
+        } else {
+            zombie_cooldown
+        }
+    }
+    
+    fn compute_solution_cooldown(&self, modifiers: &LevelPlants, usage_set: &[f32]) -> f32 {
+        let mut max_cooldown  = 0f32;
+        let mut slowest_plant = Unlockable::Peashooter;
+        let mut plant_set: FxHashSet<Unlockable> = FxHashSet::with_capacity_and_hasher(4, BuildHasherDefault::default());
+        for plant in self.plants.iter().copied() {
+            let (_, cooldown_mul) = modifiers.menu[plant as usize];
+            let mut cooldown = COOLDOWN_TABLE[plant as usize] / (1. - usage_set[plant as usize]);
+            cooldown *= mul_from_u8(cooldown_mul);
+            if plant != Unlockable::DoomShroom && !plant_set.contains(&plant) {
+                cooldown *= 0.5;
+            }
+            if cooldown > max_cooldown {
+                slowest_plant = plant;
+                max_cooldown = cooldown;
+            }
+            plant_set.insert(plant);
+        }
+        if slowest_plant != Unlockable::SmallPuff && plant_set.contains(&Unlockable::SmallPuff) {
+            max_cooldown /= 3.;
+        }
+        
+        if let Some(uses) = self.uses {
+            max_cooldown / uses as f32
+        } else {
+            0.
+        }
+    }
 }
 
 type Solutions = Box<[Box<[Unlockable]>]>;
@@ -793,6 +901,7 @@ impl RandomisationData {
         
         let mut max_frequency = HashMap::default();
         let mut first_flag_totals = HashMap::default();
+        let mut first_2_flag_max = HashMap::default();
         let mut first_wave_occurence_avgs = HashMap::default();
         let mut totals = vec![0x3F; zombie_data.len() * 4];
         
@@ -801,12 +910,16 @@ impl RandomisationData {
             let mut max_wave      = 1;
             let mut total_freq    = 0f32;
             let mut total_freq_ff = 0f32;
+            let mut max_freq_f2f  = 0f32;
             let mut first_wave    = 0;
             for (freq, j) in freq_array.iter().skip(i).step_by(spawn_vec.len()).zip(1..) {
                 let freq_mul = if j % 10 == 0 {0.5} else {1.0};
                 if *freq * freq_mul > max_freq {
                     max_freq = *freq;
                     max_wave = j;
+                    if j < 20 {
+                        max_freq_f2f = *freq;
+                    }
                 }
                 if j < 10 {
                     total_freq_ff += *freq;
@@ -819,6 +932,7 @@ impl RandomisationData {
             first_wave = u32::max(first_wave, wave_max as u32);
             max_frequency.insert(*id, (max_freq, max_wave));
             first_flag_totals.insert(*id, total_freq_ff);
+            first_2_flag_max.insert(*id, max_freq_f2f);
             first_wave_occurence_avgs.insert(*id, first_wave);
             for (dst, src) in totals[*id as usize * 4 .. 4 + *id as usize * 4].iter_mut().zip((total_freq+1.).to_le_bytes()) {
                 *dst = src;
@@ -829,6 +943,7 @@ impl RandomisationData {
             raw_averages: freq_array,
             max_frequency,
             first_flag_totals,
+            first_2_flag_max,
             first_wave_occurence_avgs,
             totals,
         })
@@ -899,6 +1014,657 @@ impl RandomisationData {
         solution_found
     }
     
+    #[allow(dead_code)]
+    fn get_zombie_solutions(&self, freq_data: &FrequencyData, zombie_idx: u32) -> SmallVec<[ProblemData; 1]> {
+        let mut out_vec = SmallVec::new();
+        static SOLUTION_TABLE: OnceLock<FxHashMap<ZombieFlags, Box<[SolutionEntry]>>> = OnceLock::new();
+        static ZOMBIE_SOLUTION_TABLE: OnceLock<FxHashMap<ZombieType, Box<[SolutionEntry]>>> = OnceLock::new();
+        let solution_table = &SOLUTION_TABLE.get_or_init(|| {
+            let mut solution_table: FxHashMap<ZombieFlags, Box<[SolutionEntry]>> = [
+                (ZombieFlags::HIGH_HEALTH, vec![
+                    SolutionEntry {
+                        plants: [Unlockable::Squash].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Jalapeno].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::CherryBomb].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::HypnoShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::HypnoShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Chomper].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::DoomShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::DoomShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::WallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::WallNut].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Pumpkin].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::EVIL_DEATH, vec![
+                    SolutionEntry {
+                        plants: [Unlockable::Squash].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Jalapeno].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::CherryBomb].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::HypnoShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::HypnoShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Chomper].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::DoomShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::DoomShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::WallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::V_HIGH_HEALTH, vec![
+                    SolutionEntry {
+                        plants: [Unlockable::HypnoShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::HypnoShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Chomper].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::WallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::WallNut].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Pumpkin].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::FLIES, vec![
+                    !SolutionEntry {
+                        plants: [Unlockable::Squash].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Jalapeno].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::CherryBomb].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::DoomShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::DoomShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::HypnoShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::HypnoShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::Chomper].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::WallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::WallNut].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::Pumpkin].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Cactus,
+                            Unlockable::StarFruit,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Cactus,
+                            Unlockable::Plantern,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Cactus,
+                            Unlockable::DoomShroom,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::GARG_TYPE, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::WallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Squash].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Jalapeno].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::CherryBomb].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Chomper].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::DoomShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::DoomShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(2),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::IS_VEHICLE, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Caltrop,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(4),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Caltrop].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Caltrop,
+                            Unlockable::ThreePeater,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::IS_METAL, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Magnetshroom,
+                            Unlockable::Blower,
+                        ].into_iter().collect(),
+                        uses: Some(4),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Magnetshroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Magnetshroom,
+                            Unlockable::Plantern,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieFlags::DOES_NOT_EAT, vec![
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::HypnoShroom,
+                            Unlockable::SmallPuff,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::HypnoShroom].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::WallNut].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [Unlockable::Pumpkin].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+            ].into_iter().collect();
+            
+            for val in solution_table.values_mut() {
+                for solution in val {
+                    solution.plants.sort_unstable_by_key(|x| *x as isize);
+                }
+            }
+            
+            solution_table
+        });
+        
+        let zombie_solution_table = &ZOMBIE_SOLUTION_TABLE.get_or_init(|| {
+            let mut solution_table: FxHashMap<ZombieType, Box<[SolutionEntry]>> = [
+                (ZombieType::ElitePaperZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Caltrop,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: Some(6), //total guess
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::DancePolZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::TallNut,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::EndoFlame,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: None, //total guess
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::PogoZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cabbagepult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cornpult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Garlic,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::SuperPogoZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cabbagepult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cornpult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Garlic,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::JackboxJumpZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cabbagepult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Cornpult,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                            Unlockable::Garlic,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::SnowZombie, vec![
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::Chomper,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                    !SolutionEntry {
+                        plants: [
+                            Unlockable::Squash,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::MachineNutZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::SuperMachineNutZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Umbrellaleaf,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::BalloonZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Blower,
+                        ].into_iter().collect(),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::SuperCherryShooterZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::Pumpkin,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::CherryPaperZombie, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::Pumpkin,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+                (ZombieType::CherryPaperZ95, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::Pumpkin,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::CherryBomb,
+                            Unlockable::WallNut,
+                        ].into_iter().collect(),
+                        uses: None,
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
+            ].into_iter().collect();
+            
+            for val in solution_table.values_mut() {
+                for solution in val {
+                    solution.plants.sort_unstable_by_key(|x| *x as isize);
+                }
+            }
+            
+            solution_table
+        });
+        
+        let zombie_data = ZOMBIE_DATA.get().unwrap();
+        let zombie = &zombie_data[zombie_idx as usize];
+        let flags = zombie.flags;
+        let problem_flags = flags.intersection(
+            ZombieFlags::HIGH_HEALTH |
+            ZombieFlags::V_HIGH_HEALTH |
+            ZombieFlags::FLIES |
+            ZombieFlags::GARG_TYPE |
+            ZombieFlags::EVIL_DEATH
+        );
+        
+        let attrib_flags = flags & !problem_flags;
+        
+        if problem_flags.is_empty() {
+            return out_vec;
+        }
+        
+        for flag in problem_flags {
+            let mut solutions: FxHashSet<SolutionEntry> = FxHashSet::with_capacity_and_hasher(64, BuildHasherDefault::default());
+            let mut not_solutions: Vec<SolutionEntry> = Vec::with_capacity(64);
+            if let Some(problem_solutions) = solution_table.get(&flag) {
+                for entry in problem_solutions {
+                    if !entry.negate {
+                        solutions.insert(entry.clone());
+                    } else {
+                        not_solutions.push(entry.clone());
+                    }
+                }
+            } else {
+                unreachable!()
+            }
+            for flag in attrib_flags {
+                if let Some(problem_solutions) = solution_table.get(&flag) {
+                    for entry in problem_solutions {
+                        if !entry.negate {
+                            solutions.insert(entry.clone());
+                        } else {
+                            not_solutions.push(entry.clone());
+                        }
+                    }
+                }
+            }
+            if let Some(problem_solutions) = zombie_solution_table.get(&zombie.zombie_type) {
+                for entry in problem_solutions {
+                    if !entry.negate {
+                        solutions.insert(entry.clone());
+                    } else {
+                        not_solutions.push(entry.clone());
+                    }
+                }
+            }
+            
+            for entry in not_solutions {
+                solutions.remove(&entry);
+            }
+            
+            let freq = match flag {
+                ZombieFlags::EVIL_DEATH => freq_data.max_frequency.get(&zombie_idx).unwrap().0
+                    .max(*freq_data.first_flag_totals.get(&zombie_idx).unwrap()),
+                _ => *freq_data.first_2_flag_max.get(&zombie_idx).unwrap(),
+            };
+            
+            let solutions: FxHashSet<SolutionEntry> = solutions.into_iter().collect();
+            
+            out_vec.push(ProblemData { zombie_idx, orig_freq: freq, freq, solutions });
+        }
+        
+        out_vec
+    }
+    
     fn is_level_possible(&mut self, level_idx: u32, level_true_idx: u32, seed: u64) -> Result<(),Vec<ImpossibleReason>> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("more_plant_stuff")) ^ level_idx as u64);
         let mut ret = Vec::new();
@@ -923,9 +1689,7 @@ impl RandomisationData {
             self.is_any_solution_satisfied(&basic_dps, level, &mut used_solutions, 3);
         }
         
-        if level.conveyor_plants.is_some() {
-            
-        } else {
+        if level.conveyor_plants.is_none() {
             let flags = level.flags.unwrap();
             match level.level_type {
                 LevelType::Pool |
@@ -958,560 +1722,108 @@ impl RandomisationData {
             }
         }
         
+        
         let spawns = self.restrictions_data.as_ref().unwrap().level_spawns.get(&(level_idx as u8)).unwrap().clone();
         let spawns_map: FxHashMap<u32, u32> = spawns.iter().map(|(k, v)| (*k, *v)).collect();
         let zombie_map = Self::get_zombie_map();
         let mut threshold_table = vec![999f32; zombie_data.len()];
         if let Some(spawn_data) = self.compute_zombie_freq_data_cached(&spawns, level_idx as usize) {
-            for (zombie_type, low_threshold, high_threshold, really_high_threshold, is_yeti) in [ //high health
-                (ZombieType::FootballZombie,0.2,0.6,3.0,false),
-                (ZombieType::DollSilver,0.1,0.6,1.5,false),
-                (ZombieType::DriverZombie,0.2,0.6,2.0,false),
-                (ZombieType::SuperDriver,0.2,0.6,2.0,false),
-                (ZombieType::SuperJackboxZombie,0.2,0.4,3.0,false),
-                (ZombieType::SuperPogoZombie,0.1,0.8,1.5,false),
-                (ZombieType::MachineNutZombie,0.1,1.2,2.0,false),
-                (ZombieType::SnowZombie,0.2,1.0,4.0,true),
-                (ZombieType::IronPeaZombie,0.1,0.8,2.0,false),
-                (ZombieType::TallNutFootballZombie,0.1,0.8,1.5,false),
-                (ZombieType::TallIceNutZombie,0.3,0.8,1.5,false),
-                (ZombieType::CherryCatapultZombie,0.1,0.8,1.5,false),
-                (ZombieType::IronPeaDoorZombie,0.1,0.4,0.5,false),
-                (ZombieType::JalaSquashZombie,0.05,0.4,0.5,false),
-                (ZombieType::GatlingFootballZombie,0.05,0.4,0.5,false),
-                (ZombieType::SuperSubmarine,0.05,0.4,0.5,false),
-                (ZombieType::JacksonDriver,0.025,0.2,0.25,false),
-                (ZombieType::FootballDrown,0.1,0.8,1.5,false),
-                (ZombieType::JackboxJumpZombie,0.05,0.4,0.5,false),
-                (ZombieType::SuperMachineNutZombie,0.05,0.4,0.5,false),
-                (ZombieType::ObsidianImpZombie,0.1,0.8,1.5,false),
-                (ZombieType::DiamondRandomZombie,0.025,0.2,0.25,false),
-                (ZombieType::DrownpultZombie,0.1,0.8,1.5,false),
-            ] {
-                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
-                let zombie = &zombie_data[zombie_idx as usize];
-                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    let max_frequency = *max_frequency;
-                    if max_frequency < low_threshold{
-                        continue;
-                    }
-                    
-                    let mut low_solutions = if !is_yeti {
-                        vec![
-                            vec![
-                                Unlockable::Squash,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::Jalapeno,
-                            ].into_boxed_slice(),
-                        ]
-                    } else {
-                        vec![
-                            vec![
-                                Unlockable::Jalapeno,
-                            ].into_boxed_slice(),
-                        ]
-                    };
-                    
-                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        low_solutions.push(vec![
-                            Unlockable::HypnoShroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    let mut high_solutions = vec![
-                        vec![
-                            Unlockable::Melonpult,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if !is_yeti {
-                        high_solutions.push(vec![
-                            Unlockable::Chomper,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        high_solutions.push(vec![
-                            Unlockable::HypnoShroom,
-                            Unlockable::SmallPuff,
-                        ].into_boxed_slice());
-                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
-                        high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                        ].into_boxed_slice());
-                    }
-                    
-                    let mut r_high_solutions = vec![
-                        vec![
-                            Unlockable::Peashooter,
-                            Unlockable::TorchWood,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::ThreePeater,
-                            Unlockable::TorchWood,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Plantern,
-                            Unlockable::StarFruit,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::CherryBomb,
-                            Unlockable::Peashooter,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Peashooter,
-                            Unlockable::SmallPuff, //gatling puff is very good
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
-                        r_high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                            Unlockable::ThreePeater,
-                        ].into_boxed_slice());
-                        r_high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                            Unlockable::SpikeRock,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
-                        r_high_solutions.push(vec![
-                            Unlockable::Magnetshroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if max_frequency < high_threshold {
-                        low_solutions.append(&mut high_solutions);
-                        low_solutions.append(&mut r_high_solutions);
-                    } else if max_frequency < really_high_threshold {
-                        high_solutions.append(&mut r_high_solutions);
-                    }
-                    
-                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            really_high_threshold
-                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            high_threshold
-                        } else {
-                            low_threshold
-                        };
-                        
-                        threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
-                    }
-                }
-            }
+            let restrictions_data = self.restrictions_data.as_ref().unwrap();
+            let plant_data = restrictions_data.level_plants.get(&(level_idx as u8)).unwrap();
             
-            for (zombie_type, low_threshold, high_threshold, really_high_threshold) in [ //very high health
-                (ZombieType::DollDiamond,0.05,0.8,1.5),
-                (ZombieType::DollGold,0.1,0.8,1.5),
-                (ZombieType::NewYearZombie,0.05,0.8,1.5),
-                (ZombieType::BlackFootball,0.05,0.4,0.75),
-                (ZombieType::UltimateFootballZombie,0.05,0.4,0.75),
-                (ZombieType::JacksonDriver,0.05,0.4,0.75),
-            ] {
-                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
-                let zombie = &zombie_data[zombie_idx as usize];
-                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    let max_frequency = *max_frequency;
-                    if max_frequency < low_threshold{
-                        continue;
-                    }
-                    
-                    let mut low_solutions = if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        vec![vec![
-                            Unlockable::HypnoShroom,
-                        ].into_boxed_slice()]
-                    } else {
-                        Vec::new()
-                    };
-                    
-                    let mut high_solutions = vec![
-                        vec![
-                            Unlockable::Chomper,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        high_solutions.push(vec![
-                            Unlockable::HypnoShroom,
-                            Unlockable::SmallPuff,
-                        ].into_boxed_slice());
-                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
-                        high_solutions.push(
-                            vec![
-                            Unlockable::Caltrop,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
-                        high_solutions.push(vec![
-                            Unlockable::Magnetshroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    let mut r_high_solutions = if zombie.flags.contains(ZombieFlags::IS_METAL) {
-                        vec![vec![
-                            Unlockable::Magnetshroom,
-                            Unlockable::Plantern,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Magnetshroom,
-                            Unlockable::Blower,
-                        ].into_boxed_slice()]
-                    } else {
-                        Vec::new()
-                    };
-                    
-                    if max_frequency < high_threshold {
-                        low_solutions.append(&mut high_solutions);
-                        low_solutions.append(&mut r_high_solutions);
-                    } else if max_frequency < really_high_threshold {
-                        high_solutions.append(&mut r_high_solutions);
-                    }
-                    
-                    if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        let threshold = if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            really_high_threshold
-                        } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            high_threshold
-                        } else {
-                            low_threshold
-                        };
-                        
-                        threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
-                    }
-                }
-            }
+            let unlocked_plants = if let Some(conveyor_plants) = &level.conveyor_plants {
+                conveyor_plants
+            } else {
+                &self.restrictions_data.as_ref().unwrap().unlocked_plants
+            };
             
-            for (zombie_type, low_threshold, high_threshold, really_high_threshold, max_threshold,
-                can_firepower, can_umbrella, can_cwall, can_chomper) in [ //evil death zombies
-                (ZombieType::DancePolZombie,0.05,0.4,0.8,2.0,true,false,false,false),
-                (ZombieType::JacksonZombie,0.05,0.4,0.8,2.0,true,false,false,true),
-                (ZombieType::ElitePaperZombie,0.05,0.4,0.8,1.5,true,false,false,true),
-                (ZombieType::SuperPogoZombie,0.05,0.4,0.8,2.0,true,true,false,true),
-                (ZombieType::MachineNutZombie,0.05,0.4,0.8,1.5,true,true,false,true),
-                (ZombieType::SnowGunZombie,0.05,0.4,0.8,1.5,true,false,false,false),
-                (ZombieType::CherryShooterZombie,0.05,0.4,0.8,1.5,true,false,true,true),
-                (ZombieType::SuperCherryShooterZombie,0.05,0.3,0.6,1.0,false,false,true,false),
-                (ZombieType::CherryPaperZombie,0.05,0.4,0.8,2.0,false,false,true,true),
-                (ZombieType::CherryCatapultZombie,0.05,0.4,0.8,1.5,true,true,false,true),
-                (ZombieType::JalaSquashZombie,0.05,0.4,0.8,1.3,true,false,false,false),
-                (ZombieType::JacksonDriver,0.05,0.2,0.4,0.8,false,false,false,true),
-                (ZombieType::CherryPaperZ95,0.05,0.1,0.3,0.6,false,false,true,true),
-                (ZombieType::QuickJacksonZombie,0.05,0.2,0.4,0.8,true,false,false,true),
-                (ZombieType::JackboxJumpZombie,0.05,0.4,0.8,1.5,true,true,false,true),
-                (ZombieType::SuperMachineNutZombie,0.05,0.4,0.8,1.5,true,false,false,true),
-                (ZombieType::DolphinGatlingZombie,0.05,0.2,0.4,1.0,true,false,false,true),
-                (ZombieType::DrownpultZombie,0.05,0.4,0.8,2.0,false,false,true,true), //idk how bad these guys are actually, but they probably belong here
-            ] {
-                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
-                let zombie = &zombie_data[zombie_idx as usize];
-                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    let max_frequency = *max_frequency;
-                    if max_frequency < low_threshold {
-                        continue;
-                    }
-                    
-                    let mut low_solutions = vec![
-                        vec![
-                            Unlockable::Squash,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Jalapeno,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        low_solutions.push(vec![
-                            Unlockable::HypnoShroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    let mut high_solutions = if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 && can_chomper {
-                        vec![
-                            vec![
-                                Unlockable::Chomper,
-                            ].into_boxed_slice(),
-                        ]
-                    } else {
-                        Vec::new()
-                    };
-                    
-                    if !zombie.flags.contains(ZombieFlags::DOES_NOT_EAT) {
-                        high_solutions.push(vec![
-                            Unlockable::HypnoShroom,
-                            Unlockable::SmallPuff,
-                        ].into_boxed_slice());
-                    } else if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
-                        high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
-                        high_solutions.push(vec![
-                            Unlockable::Magnetshroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    let mut r_high_solutions = if zombie.flags.contains(ZombieFlags::IS_METAL) {vec![
-                        vec![
-                            Unlockable::Magnetshroom,
-                            Unlockable::Plantern,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Magnetshroom,
-                            Unlockable::Blower,
-                        ].into_boxed_slice()
-                    ]} else {
-                        Vec::new()
-                    };
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_VEHICLE) {
-                        r_high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                            Unlockable::ThreePeater,
-                        ].into_boxed_slice());
-                        r_high_solutions.push(vec![
-                            Unlockable::Caltrop,
-                            Unlockable::SpikeRock,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if can_firepower {
-                        for solution in if level.level_type != LevelType::Roof {vec![
-                            vec![
-                                Unlockable::Peashooter,
-                                Unlockable::TorchWood,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::ThreePeater,
-                                Unlockable::TorchWood,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::Plantern,
-                                Unlockable::StarFruit,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::CherryBomb,
-                                Unlockable::Peashooter,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::Peashooter,
-                                Unlockable::SmallPuff,
-                            ].into_boxed_slice(),
-                        ]} else {vec![
-                            vec![
-                                Unlockable::Peashooter,
-                                Unlockable::TorchWood,
-                                Unlockable::Jalapeno,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::ThreePeater,
-                                Unlockable::TorchWood,
-                                Unlockable::Jalapeno,
-                            ].into_boxed_slice(),
-                            vec![
-                                Unlockable::Plantern,
-                                Unlockable::StarFruit,
-                            ].into_boxed_slice(),
-                        ]} {
-                            r_high_solutions.push(solution);
+            let mut problem_vec: Vec<ProblemData> = spawns
+                .iter()
+                .flat_map(|(i, _)| self.get_zombie_solutions(&spawn_data, *i).into_iter())
+                .map(|mut data| {
+                    data.solutions = data.solutions
+                        .into_iter()
+                        .filter(|solution| {
+                            solution.plants
+                                .iter()
+                                .all(|plant| unlocked_plants.contains(&plant))
+                        })
+                        .collect();
+                    data
+                })
+                .collect();
+            
+            let mut solution_set: FxHashMap<SolutionEntry, (f64, u32)> = HashMap::with_capacity_and_hasher(512, BuildHasherDefault::default());
+            let mut usage_array = [0f32; 41];
+            let mut ldlist: Vec<(u32, Option<u32>)> = Vec::with_capacity(768);
+            
+            for iteration in 0..5 {
+                for (i, solution_data) in problem_vec.iter().enumerate() {
+                    for entry in &solution_data.solutions {
+                        let mut next: Option<u32> = None;
+                        if let Some((f, e)) = solution_set.get_mut(entry) {
+                            *f += solution_data.freq as f64;
+                            next = Some(*e);
+                            *e = ldlist.len() as u32;
+                        } else {
+                            solution_set.insert(entry.clone(), (solution_data.freq as f64, ldlist.len() as u32));
                         }
+                        
+                        ldlist.push((i as u32, next));
                     }
-                    
-                    if max_frequency < high_threshold {
-                        low_solutions.append(&mut high_solutions);
-                        low_solutions.append(&mut r_high_solutions);
-                    } else if max_frequency < really_high_threshold {
-                        high_solutions.append(&mut r_high_solutions);
+                }
+                
+                let mut total_weight = 0f64;
+                let mut to_remove: FxHashSet<SolutionEntry> = HashSet::with_capacity_and_hasher(4, BuildHasherDefault::default());
+                for (entry, (cumulative_weight, _)) in solution_set.iter_mut() {
+                    let weight = cumulative_weight.min(4. / entry.compute_solution_cooldown(plant_data, &usage_array) as f64) * entry.weight as f64;
+                    *cumulative_weight = total_weight;
+                    total_weight += weight;
+                    if weight == 0. {
+                        to_remove.insert(entry.clone());
                     }
-                    
-                    if level.level_type != LevelType::Roof && level.flags.unwrap_or(1) != 1 {
-                        if can_umbrella {
-                            for solution in [
-                                vec![
-                                    Unlockable::Umbrellaleaf,
-                                    Unlockable::Garlic,
-                                ].into_boxed_slice(),
-                                vec![
-                                    Unlockable::Umbrellaleaf,
-                                    Unlockable::Cornpult,
-                                ].into_boxed_slice(),
-                            ] {
-                                r_high_solutions.push(solution);
-                            }
-                        }
-                        if can_cwall {
-                            r_high_solutions.push(vec![
-                                Unlockable::CherryBomb,
-                                Unlockable::WallNut,
-                            ].into_boxed_slice());
-                            r_high_solutions.push(vec![
-                                Unlockable::CherryBomb,
-                                Unlockable::Pumpkin,
-                            ].into_boxed_slice());
-                        }
-                    }
-                    
-                    let threshold = if !self.is_any_solution_satisfied(&r_high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        max_threshold
-                    } else if self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        really_high_threshold
-                    } else if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        high_threshold
+                }
+                let solution_vec: Vec<(SolutionEntry, (f64, u32))> = solution_set.drain().filter(|(s, (_, _))| !to_remove.contains(s)).collect();
+                
+                if solution_vec.is_empty() {
+                    break;
+                }
+                
+                assert_ne!(total_weight, 0f64);
+                let val = rng.next_u32() as f64 / 4_294_967_296. * total_weight;
+                let idx = solution_vec.partition_point(|(_, (csum, _))| *csum <= val);
+                let (solution, (_, idx)) = &solution_vec[idx - 1];
+                used_solutions.insert(vec![solution.plants.iter().copied().collect()].into_boxed_slice(), 1);
+                let mut ldlist_idx = Some(*idx);
+                let mut problem_list: SmallVec<[u32; 16]> = SmallVec::new();
+                while ldlist_idx.is_some() {
+                    let (problem_idx, next_idx) = ldlist[unsafe {ldlist_idx.unwrap_unchecked()} as usize];
+                    problem_vec[problem_idx as usize].solutions.remove(solution);
+                    problem_list.push(problem_idx);
+                    ldlist_idx = next_idx;
+                }
+                
+                while solution.compute_solution_cooldown(plant_data, &usage_array) != f32::INFINITY  && !problem_list.is_empty() {
+                    let problem_idx_idx = ((rng.next_u32() as u64 * problem_list.len() as u64) >> 32) as usize;
+                    let problem_idx = problem_list[problem_idx_idx];
+                    let problem = &mut problem_vec[problem_idx as usize];
+                    problem.freq = 3. / solution.compute_new_plant_utilization(plant_data, &mut usage_array, 3. / problem.freq);
+                    if problem.freq == 0. {
+                        problem_list.remove(problem_idx_idx);
                     } else {
-                        low_threshold
-                    };
-                    
-                    threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
+                        break;
+                    }
                 }
+                
+                if problem_vec.is_empty() {
+                    break;
+                }
+                
+                ldlist.drain(..);
             }
             
-            for (zombie_type, low_threshold, high_threshold) in [ //gargs
-                (ZombieType::Gargantuar,0.1,0.6),
-                (ZombieType::RedGargantuar,0.1,0.6),
-                (ZombieType::IronGargantuar,0.1,0.6),
-                (ZombieType::IronRedGargantuar,0.1,0.6),
-                (ZombieType::SuperGargantuar,0.05,0.3),
-            ] {
-                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
-                let zombie = &zombie_data[zombie_idx as usize];
-                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    let max_frequency = *max_frequency;
-                    if max_frequency < low_threshold{
-                        continue;
-                    }
-                    
-                    let mut low_solutions = vec![
-                        vec![
-                            Unlockable::DoomShroom,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::CherryBomb,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Squash,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::PotatoMine,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Jalapeno,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    let mut high_solutions = vec![
-                        vec![
-                            Unlockable::Peashooter,
-                            Unlockable::TorchWood,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::ThreePeater,
-                            Unlockable::TorchWood,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Plantern,
-                            Unlockable::StarFruit,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Peashooter,
-                            Unlockable::CherryBomb,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Peashooter,
-                            Unlockable::SmallPuff,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if zombie.flags.contains(ZombieFlags::IS_METAL) {
-                        high_solutions.push(vec![
-                            Unlockable::Magnetshroom,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if max_frequency < high_threshold {
-                        low_solutions.append(&mut high_solutions);
-                    }
-                    
-                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            high_threshold
-                        } else {
-                            low_threshold
-                        };
-                        
-                        threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
-                    }
-                }
-            }
-            
-            for (zombie_type, low_threshold, high_threshold, can_blover) in [ //balloons
-                (ZombieType::BalloonZombie,0.05,0.2,true),
-                (ZombieType::IronBallonZombie,0.05,0.2,false),
-                (ZombieType::IronBallonZombie2,0.05,0.2,false),
-                (ZombieType::KirovZombie,0.05,0.2,false),
-                (ZombieType::UltimateKirovZombie,0.05,0.2,false),
-            ] {
-                let zombie_idx = *zombie_map.get(&zombie_type).unwrap_or_else(|| panic!("Zombie type does not exist: \"{zombie_type:?}\""));
-                let _zombie = &zombie_data[zombie_idx as usize];
-                if let Some((max_frequency, _)) = spawn_data.max_frequency.get(&zombie_idx) {
-                    let max_frequency = *max_frequency;
-                    if max_frequency < low_threshold{
-                        continue;
-                    }
-                    
-                    let mut low_solutions = vec![
-                        vec![
-                            Unlockable::DoomShroom,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::CherryBomb,
-                        ].into_boxed_slice(),
-                        vec![
-                            Unlockable::Jalapeno,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    let mut high_solutions = vec![ match level.level_type {
-                        LevelType::Pool |
-                        LevelType::Fog => vec![
-                            Unlockable::Cactus,
-                            Unlockable::Plantern,
-                            Unlockable::LilyPad,
-                        ].into_boxed_slice(),
-                        _ => vec![
-                            Unlockable::Cactus,
-                            Unlockable::Plantern,
-                        ].into_boxed_slice(),
-                    }, vec![
-                            Unlockable::Cactus,
-                            Unlockable::StarFruit,
-                        ].into_boxed_slice(),
-                    ];
-                    
-                    if can_blover {
-                        high_solutions.push(vec![
-                            Unlockable::Blower,
-                        ].into_boxed_slice());
-                    }
-                    
-                    if max_frequency < high_threshold {
-                        low_solutions.append(&mut high_solutions);
-                    }
-                    
-                    if !self.is_any_solution_satisfied(&high_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                        let threshold = if self.is_any_solution_satisfied(&low_solutions.into_boxed_slice(), level, &mut used_solutions, 1) {
-                            high_threshold
-                        } else {
-                            low_threshold
-                        };
-                        
-                        threshold_table[zombie_idx as usize] = threshold_table[zombie_idx as usize].min(threshold);
-                    }
-                }
+            for problem in problem_vec {
+                threshold_table[problem.zombie_idx as usize] = (problem.orig_freq - problem.freq).max(0.05);
             }
             
             {
@@ -1673,7 +1985,6 @@ impl RandomisationData {
                 unlockable_importance[*unlockable as usize] += importance;
             }
         }
-        
         let restrictions_data = self.restrictions_data.as_ref().unwrap();
         let plant_data = restrictions_data.level_plants.get(&(level_idx as u8)).unwrap();
         let mut weight_div = 1f64;
@@ -2187,7 +2498,6 @@ impl RandomisationData {
     }
 }
 
-#[allow(dead_code)]
-fn display_mul(mul: u8) -> f32 {
+fn mul_from_u8(mul: u8) -> f32 {
     ((mul & 0x7F) as f32 / 127. + 1.) * if mul < 0x80 {0.5} else {1.}
 }
