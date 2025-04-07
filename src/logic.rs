@@ -1757,7 +1757,7 @@ impl RandomisationData {
             let mut usage_array = [0f32; 41];
             let mut ldlist: Vec<(u32, Option<u32>)> = Vec::with_capacity(768);
             
-            for iteration in 0..5 {
+            for _ in 0..5 {
                 for (i, solution_data) in problem_vec.iter().enumerate() {
                     for entry in &solution_data.solutions {
                         let mut next: Option<u32> = None;
