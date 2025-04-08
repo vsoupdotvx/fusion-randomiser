@@ -218,9 +218,9 @@ impl IL2CppType {
             IL2CppTypeEnum::String      => "String".to_owned(),
             IL2CppTypeEnum::Ptr         => {
                 let type_off = meta.pe.map_v2p(self.data).unwrap();
-                let name     = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
-                generic      = name.1;
-                format!("*mut {}", name.0)
+                let name;
+                (name, generic) = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
+                format!("*mut {}", name)
             },
             IL2CppTypeEnum::ByRef       => "?02".to_owned(),
             IL2CppTypeEnum::ValueType   => self.get_type_name(meta, nested),
@@ -235,9 +235,9 @@ impl IL2CppType {
             IL2CppTypeEnum::Array       => {
                 let array_info_off = meta.pe.map_v2p(self.data).unwrap();
                 let type_off       = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[array_info_off..array_info_off+8].try_into().unwrap())).unwrap();
-                let name           = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
-                generic            = name.1;
-                format!("[{}; {}]", name.0, meta.assembly[array_info_off+8])
+                let name;
+                (name, generic)    = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
+                format!("[{}; {}]", name, meta.assembly[array_info_off+8])
             },
             IL2CppTypeEnum::GenericInst => self.get_type_name(meta, nested),//"?07".to_owned(),//{format!("?07 {}", self.get_type_name(&meta))},
             IL2CppTypeEnum::TypedByRef  => "typed reference".to_owned(),
@@ -247,9 +247,9 @@ impl IL2CppType {
             IL2CppTypeEnum::Object      => "object".to_owned(),
             IL2CppTypeEnum::SzArray     => {
                 let type_off = meta.pe.map_v2p(self.data).unwrap();
-                let name     = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
-                generic      = name.1;
-                format!("[{}]", name.0)
+                let name;
+                (name, generic) = IL2CppType::from_bytes(&meta.assembly[type_off..type_off+12]).name(meta);
+                format!("[{}]", name)
             },
             IL2CppTypeEnum::MVar        => {
                 generic           = Some(self.data as u32);
@@ -497,16 +497,16 @@ impl Method {
         };
         
         let return_type = {
-            let return_type_name = meta.get_arg_name(self.metadata.return_type);
-            if return_type_name.0 == "c_void" {
+            let (return_type_name, generic_idx) = meta.get_arg_name(self.metadata.return_type);
+            if return_type_name == "c_void" {
                 "".to_owned()
             } else {
-                if let Some(generic_idx) = return_type_name.1 {
+                if let Some(generic_idx) = generic_idx {
                     if !generic_vec.contains(&generic_idx) {
                         generic_vec.push(generic_idx);
                     }
                 }
-                format!(" -> {}", return_type_name.0)
+                format!(" -> {}", return_type_name)
             }
         };
         
@@ -704,7 +704,7 @@ impl IL2CppStruct {
             }
             return None;
         }
-        let mut off_vec: SmallVec<[(u32,u32);30]> = SmallVec::with_capacity(self.field_count as usize);
+        let mut off_vec: SmallVec<[(u32,u32);31]> = SmallVec::with_capacity(self.field_count as usize);
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
         if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
             for field_idx in 0 .. self.field_count as usize {
@@ -1275,16 +1275,19 @@ impl IL2CppDumper {
             }
         }
         
-        for icgm in self.icgm_array.iter().enumerate() {
-            if icgm.1.img.type_start >= 0 {
-                for type_idx in icgm.1.img.type_start as usize .. icgm.1.img.type_start as usize + icgm.1.img.type_count as usize {
+        for (i, icgm) in self.icgm_array.iter().enumerate() {
+            if icgm.img.type_start >= 0 {
+                for type_idx in icgm.img.type_start as usize .. icgm.img.type_start as usize + icgm.img.type_count as usize {
                     let il2cppstruct = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[type_idx*STRUCT_STRIDE..type_idx*STRUCT_STRIDE+STRUCT_STRIDE]);
                     if il2cppstruct.method_start >= 0 {
-                        #[allow(clippy::needless_range_loop)]
-                        for method_idx in il2cppstruct.method_start as usize .. il2cppstruct.method_start as usize + il2cppstruct.method_count as usize {
-                            resolved_method_array[method_idx] = Some(unsafe {NonZero::new_unchecked(icgm.0 as u16 + 1)});
-                            let token = (self.methods_array[method_idx].metadata.token & 0xffffff) - 1;
-                            resolved_cgm_method_array[resolved_cgm_idx_array[icgm.0] + token as usize] = true;
+                        for (resolved_method, method) in resolved_method_array[il2cppstruct.method_start as usize ..]
+                            .iter_mut()
+                            .zip(self.methods_array[il2cppstruct.method_start as usize ..].iter())
+                            .take(il2cppstruct.method_count as usize)
+                        {
+                            *resolved_method = Some(unsafe {NonZero::new_unchecked(i as u16 + 1)});
+                            let token = (method.metadata.token & 0xffffff) - 1;
+                            resolved_cgm_method_array[resolved_cgm_idx_array[i] + token as usize] = true;
                         }
                     }
                 }
@@ -1293,23 +1296,21 @@ impl IL2CppDumper {
         
         let mut unresolved_method_table: FxHashMap<usize, u16> = HashMap::with_capacity_and_hasher(16, BuildHasherDefault::default());
         
-        for icgm in self.icgm_array.iter().enumerate() {
-            for i in 0 .. icgm.1.cgm.method_ptrs_cnt as usize {
-                if !resolved_cgm_method_array[i + resolved_cgm_idx_array[icgm.0]] {
-                    unresolved_method_table.insert(i, icgm.0 as u16);
+        for (i, icgm) in self.icgm_array.iter().enumerate() {
+            for j in 0 .. icgm.cgm.method_ptrs_cnt as usize {
+                if !resolved_cgm_method_array[j + resolved_cgm_idx_array[i]] {
+                    unresolved_method_table.insert(j, i as u16);
                 }
             }
         }
-        #[allow(clippy::needless_range_loop)]
-        for method_idx in 0..self.methods_array.len() {
+        
+        for (method_idx, resolved_method) in (0..self.methods_array.len()).zip(resolved_method_array.iter()) {
             let method = &mut self.methods_array[method_idx];
             let token  = (method.metadata.token & 0xffffff) - 1;
-            if let Some(icgm_idx) = resolved_method_array[method_idx] {
+            if let Some(icgm_idx) = resolved_method {
                 let addr_off = self.icgm_array[icgm_idx.get() as usize - 1].cgm.method_ptrs_off + token as usize * 8;
                 method.addr = u64::from_le_bytes(self.assembly[addr_off..addr_off+8].try_into().unwrap());
-                //println!("{:x}", method.addr);
             } else {
-                println!("a");
                 if let Some(icgm_idx) = unresolved_method_table.get(&(token as usize)) {
                     let addr_off = self.icgm_array[*icgm_idx as usize].cgm.method_ptrs_off + token as usize * 8;
                     method.addr = u64::from_le_bytes(self.assembly[addr_off..addr_off+8].try_into().unwrap());
@@ -1321,8 +1322,8 @@ impl IL2CppDumper {
         
         {
             let mut sorted: Vec<(u64, usize)> = Vec::with_capacity(method_cnt);
-            for i in self.methods_array.iter().enumerate() {
-                sorted.push((i.1.addr, i.0));
+            for (i, method) in self.methods_array.iter().enumerate() {
+                sorted.push((method.addr, i));
             }
             sorted.sort_unstable_by_key(|(addr, _idx)| *addr);
             

@@ -1967,14 +1967,11 @@ impl RandomisationData {
                 &self.restrictions_data.as_ref().unwrap().unlocked_plants
             };
             
-            'solve_loop: for solution in solutions {
+            for solution in solutions {
                 if !solution.night || level.level_type == LevelType::Night || level.level_type == LevelType::Fog {
-                    for plant in &solution.plants {
-                        if !unlocked_plants.contains(plant) {
-                            continue 'solve_loop;
-                        }
+                    if solution.plants.iter().all(|plant| unlocked_plants.contains(plant)) {
+                        options.push(solution.clone());
                     }
-                    options.push(solution.clone());
                 }
             }
             

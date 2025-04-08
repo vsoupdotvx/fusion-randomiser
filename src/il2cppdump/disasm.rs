@@ -51,25 +51,25 @@ impl Method {
             }
         }
         
-        for instruction in instructions.iter().enumerate() {
-            match instruction.1.flow_control() {
+        for (i, instruction) in instructions.iter().enumerate() {
+            match instruction.flow_control() {
                 FlowControl::UnconditionalBranch |
                 FlowControl::ConditionalBranch => {
-                    let addr = instruction.1.near_branch64();
+                    let addr = instruction.near_branch64();
                     if addr >= self.addr && addr <= self.addr + self.len {
-                        if instruction.1.next_ip() <= addr {
+                        if instruction.next_ip() <= addr {
                             let mut indent  = true;
                             let mut last    = false;
-                            let mut end_idx = instruction.0+1;
-                            for i in instructions[instruction.0+1..].iter().enumerate() {
-                                if i.1.next_ip() == addr {
-                                    end_idx += i.0 + 1;
+                            let mut end_idx = i+1;
+                            for (j, instruction_b) in instructions[i+1..].iter().enumerate() {
+                                if instruction_b.next_ip() == addr {
+                                    end_idx += j + 1;
                                     last = true;
                                 }
-                                match i.1.flow_control() {
+                                match instruction_b.flow_control() {
                                     FlowControl::UnconditionalBranch |
                                     FlowControl::ConditionalBranch => {
-                                        if (i.1.near_branch64() >= addr || i.1.near_branch64() <= instruction.1.next_ip()) && last {
+                                        if (instruction_b.near_branch64() >= addr || instruction_b.near_branch64() <= instruction.next_ip()) && last {
                                             end_idx -= 1;
                                         }
                                     }
@@ -85,19 +85,19 @@ impl Method {
                                 }
                             }
                             if indent {
-                                for i in indent_vec[instruction.0+1..end_idx].iter_mut() {
+                                for i in indent_vec[i+1..end_idx].iter_mut() {
                                     *i = i.saturating_add(1);
                                 }
                             }
                         } else {
                             let mut indent    = true;
                             let mut start_idx = 0;
-                            for i in instructions[..instruction.0].iter().rev().enumerate() {
-                                if i.1.ip() == addr {
-                                    start_idx += i.0 + 1;
+                            for (i, instruction) in instructions[..i].iter().rev().enumerate() {
+                                if instruction.ip() == addr {
+                                    start_idx += i + 1;
                                     break;
                                 }
-                                match i.1.flow_control() {
+                                match instruction.flow_control() {
                                     FlowControl::Return |
                                     FlowControl::Interrupt => {
                                         indent = false;
@@ -107,7 +107,7 @@ impl Method {
                                 }
                             }
                             if indent {
-                                for i in indent_vec[instruction.0-start_idx..instruction.0].iter_mut() {
+                                for i in indent_vec[i-start_idx..i].iter_mut() {
                                     *i += 1;
                                 }
                             }
@@ -116,7 +116,7 @@ impl Method {
                 }
                 _ => {}
             }
-            mnemonic_formatter.format_mnemonic_options(instruction.1, &mut mnemonic, 0u32);
+            mnemonic_formatter.format_mnemonic_options(instruction, &mut mnemonic, 0u32);
             mnemonic_len_vec.push(mnemonic.len() as u8 + 1);
             mnemonic.drain(..);
         }
@@ -179,29 +179,29 @@ impl Method {
                 operand_len_vec[j]  = operand_maximum - min(operand_maximum, operand_len_vec[j]) + max(instructions[j].op_count() as u8, 1) - 1;
             }
             
-            for instruction in instructions[0..last_ret_idx+1].iter().enumerate() {
-                let label_ident = if instruction.0 != 0 {
-                    min(indent_vec[instruction.0-1], indent_vec[instruction.0]) as usize
+            for (i, instruction) in instructions[0..last_ret_idx+1].iter().enumerate() {
+                let label_ident = if i != 0 {
+                    min(indent_vec[i-1], indent_vec[i]) as usize
                 } else {
                     1
                 };
-                if let Some(idx) = locs.get(&instruction.1.ip()) {
+                if let Some(idx) = locs.get(&instruction.ip()) {
                     format_label(*idx, &mut label_name, function_name_len, ".loc");
-                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
+                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.ip());
                 }
-                if let Some(idx) = loops.get(&instruction.1.ip()) {
+                if let Some(idx) = loops.get(&instruction.ip()) {
                     format_label(*idx, &mut label_name, function_name_len, ".loop");
-                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.1.ip());
+                    format_to!(out_str, "{}{}: #0x{:X}\n", "\t".repeat(label_ident), &label_name, instruction.ip());
                 }
-                let tabs = indent_vec[instruction.0] as isize;
+                let tabs = indent_vec[i] as isize;
                 formatter
                     .options_mut()
-                    .set_first_operand_char_index(mnemonic_len_vec[instruction.0] as u32);
-                formatter.format(instruction.1, &mut out_string);
+                    .set_first_operand_char_index(mnemonic_len_vec[i] as u32);
+                formatter.format(instruction, &mut out_string);
                 
-                if instruction.1.op_count() > 1 {
-                    let spaces       = " ".repeat(((operand_len_vec[instruction.0] as u32 + instruction.1.op_count() - 2) / (instruction.1.op_count() - 1)) as usize);
-                    let mut counter  = instruction.1.op_count() as usize - (spaces.len() * (instruction.1.op_count() as usize - 1) - operand_len_vec[instruction.0] as usize);
+                if instruction.op_count() > 1 {
+                    let spaces       = " ".repeat(((operand_len_vec[i] as u32 + instruction.op_count() - 2) / (instruction.op_count() - 1)) as usize);
+                    let mut counter  = instruction.op_count() as usize - (spaces.len() * (instruction.op_count() as usize - 1) - operand_len_vec[i] as usize);
                     let mut inquotes = false;
                     let mut inparens = false;
                     let mut str_pos  = out_string.chars().count();
@@ -239,12 +239,12 @@ impl Method {
                         b'7' as i8, b'8' as i8, b'9' as i8, b'A' as i8, b'B' as i8, b'C' as i8, b'D' as i8,
                         b'E' as i8, b'F' as i8,
                     );
-                    let v  = _mm_loadl_epi64(&instruction.1.ip().to_be_bytes() as *const [u8] as *const __m128i);
+                    let v  = _mm_loadl_epi64(&instruction.ip().to_be_bytes() as *const [u8] as *const __m128i);
                     let v4 = _mm_srli_epi64(v, 4);
                     let il = _mm_unpacklo_epi8(v4, v);
                     let m  = _mm_and_si128(il, nibble_mask);
                     let hexchars = _mm_shuffle_epi8(hex_digits, m);
-                    let pad = (instruction.1.ip() | 0x1).leading_zeros() as usize >> 2;
+                    let pad = (instruction.ip() | 0x1).leading_zeros() as usize >> 2;
                     _mm_storeu_si128(&mut out_buf as *mut [u8] as *mut __m128i, hexchars);
 
                     str::from_utf8(&out_buf[pad..]).unwrap()
@@ -252,7 +252,7 @@ impl Method {
                 //and that the compiler doesn't break with its "optimizations" that add an extra like 5 instructions
                 out_str.push('\n');
                 out_string.clear();
-                reg_data.process_instruction(instruction.1, meta);
+                reg_data.process_instruction(instruction, meta);
             }
             
             *out_str += "\n";
