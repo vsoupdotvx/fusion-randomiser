@@ -650,7 +650,7 @@ impl RandomisationData {
                     Unlockable::LilyPad, //cattail
                 ].into_boxed_slice(),
                 vec![
-                    Unlockable::Blower,
+                    Unlockable::Blover,
                 ].into_boxed_slice(),
             ].into_boxed_slice()),
             (Problem::NoPuff, vec![
@@ -699,7 +699,7 @@ impl RandomisationData {
                     Unlockable::LilyPad, //cattail
                 ].into_boxed_slice(),
                 vec![
-                    Unlockable::Blower,
+                    Unlockable::Blover,
                 ].into_boxed_slice(),
             ].into_boxed_slice()),
             (Problem::Snorkle, vec![
@@ -1334,7 +1334,7 @@ impl RandomisationData {
                     SolutionEntry {
                         plants: [
                             Unlockable::Magnetshroom,
-                            Unlockable::Blower,
+                            Unlockable::Blover,
                         ].into_iter().collect(),
                         uses: Some(4),
                         ..Default::default()
@@ -1533,7 +1533,7 @@ impl RandomisationData {
                 (ZombieType::BalloonZombie, vec![
                     SolutionEntry {
                         plants: [
-                            Unlockable::Blower,
+                            Unlockable::Blover,
                         ].into_iter().collect(),
                         ..Default::default()
                     },
@@ -2662,7 +2662,7 @@ impl RandomisationData {
             Unlockable::SeaShroom,
             Unlockable::Plantern,
             Unlockable::Cactus,
-            Unlockable::Blower,
+            Unlockable::Blover,
             Unlockable::StarFruit,
             Unlockable::Pumpkin,
             Unlockable::Magnetshroom,

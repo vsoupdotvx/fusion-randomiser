@@ -6,32 +6,31 @@ HASH_U32 = 0x1758F99D
 	call replace_card_unlock
 "ENDCard::Start(&mut self)+0x1AC":
 
-"Advanture_Btn::OnMouseUp(&mut self)+0x4E":
+"Advanture_Btn::OnMouseUp(&mut self)+0x149":
 	call adventure_level_enter_1
-	nop
-"ENDAdvanture_Btn::OnMouseUp(&mut self)+0x4E":
+"ENDAdvanture_Btn::OnMouseUp(&mut self)+0x149":
 
-"MainMenu_Btn::OnMouseUp(&mut self)+0x13B":
+"MainMenu_Btn::OnMouseUp(&mut self)+0x10B":
 	call adventure_level_enter_2
-"ENDMainMenu_Btn::OnMouseUp(&mut self)+0x13B":
+"ENDMainMenu_Btn::OnMouseUp(&mut self)+0x10B":
 
-"PrizeMgr::Click(&mut self)+0x364":
+"PrizeMgr::Click(&mut self)+0x431":
 	call set_level_trophy
-"ENDPrizeMgr::Click(&mut self)+0x364":
+"ENDPrizeMgr::Click(&mut self)+0x431":
 
-"UIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x337":
+"UIMgr::EnterGame(levelType: LevelType, levelNumber: i32, id: i32, name: String)+0x18B":
 	call rerandomise
 	nop
-"ENDUIMgr::EnterGame(levelType: i32, levelNumber: i32)+0x337":
+"ENDUIMgr::EnterGame(levelType: LevelType, levelNumber: i32, id: i32, name: String)+0x18B":
 
 "MixData::InitMixData()+0x77":
 	call store_mix_data_ptr
 	.nops 2
 "ENDMixData::InitMixData()+0x77":
 
-"PrizeMgr::GoBack(&mut self)+0x142":
-	jmp adventure_level_enter_2
-"ENDPrizeMgr::GoBack(&mut self)+0x142":
+"PrizeMgr::GoBack(&mut self)+0x17A":
+	call adventure_level_enter_2
+"ENDPrizeMgr::GoBack(&mut self)+0x17A":
 
 "GiveFertilize::AnimGive(&mut self)+0x112":
 	.nops 6
@@ -47,10 +46,10 @@ HASH_U32 = 0x1758F99D
 	jmp "AnimUIOver::Die.locY"
 "ENDAnimUIOver::Die(&mut self)+0x824":
 
-"AnimUIOver::Die(&mut self)+0x905":
+"AnimUIOver::Die(&mut self)+0x908":
 	insb
 	jmp "AnimUIOver::Die.locBC"
-"ENDAnimUIOver::Die(&mut self)+0x905":
+"ENDAnimUIOver::Die(&mut self)+0x908":
 
 replace_card_unlock:
 	movl  %ecx, %edx
@@ -62,6 +61,8 @@ replace_card_unlock:
 	replace_card_unlock.locA:
 	cmpl  $"PlantType::CattailGirl", %edx
 	je    replace_card_unlock.locB
+	cmpl  $"PlantType::Gravebuster", %edx
+	je    replace_card_unlock.locC
 	leaq  plant_lut(%rip), %rcx
 	movl  level_idx(%rip), %edx
 	incl  %edx
@@ -77,6 +78,9 @@ replace_card_unlock:
 	cmpl  $-3,             %edx
 	setnc %al
 	ret
+	replace_card_unlock.locC:
+	movb $1, %al
+	ret
 
 set_level_trophy:
 	cmpl $"LevelType::Advanture", GameAPP.theBoardType(%rax)
@@ -90,17 +94,16 @@ set_level_trophy:
 adventure_level_enter_1:
 	decl   %edx
 	movl   %edx, level_idx(%rip)
+	mov    %rcx,      0x28(%rsp)
 	leaq   level_lut(%rip), %rcx
-	movsbq (%rcx,%rdx),     %rdx
-	xorq   %r8,              %r8
-	movl   Advanture_Btn.levelType(%rbx), %ecx
+	movzbl (%rcx,%rdx),     %edx
 	ret
 
 adventure_level_enter_2:
 	leaq   level_lut(%rip), %rdx
 	movl   level_idx(%rip), %eax
 	movzbl (%rdx,%rax),     %edx
-	jmp    "UIMgr::EnterGame(levelType: i32, levelNumber: i32)"
+	jmp    "UIMgr::EnterGame(levelType: LevelType, levelNumber: i32, id: i32, name: String)"
 
 MAX_PLANT = 1181
 plant_type_flatten: #This likely needs to be checked every single update
@@ -108,7 +111,7 @@ plant_type_flatten: #This likely needs to be checked every single update
 	
 	cmpl $1000, %ecx
 	jc   plant_type_flatten.locA
-		subl $61, %ecx
+		subl $56, %ecx
 	plant_type_flatten.locA:
 	
 	testl %ecx, %ecx
@@ -116,19 +119,19 @@ plant_type_flatten: #This likely needs to be checked every single update
 	
 	cmpl $900, %ecx
 	jc   plant_type_flatten.locB
-		subl $99, %ecx
+		subl $599, %ecx
 	plant_type_flatten.locB:
 	
 	negq %rax
 	
-	cmpl $800, %ecx
+	cmpl $300, %ecx
 	jc   plant_type_flatten.locC
-		subl $541, %ecx
+		subl $41, %ecx
 	plant_type_flatten.locC:
 	
-	cmpl $241, %ecx
+	cmpl $235, %ecx
 	jc   plant_type_flatten.locD
-		subl $206, %ecx
+		subl $196, %ecx
 	plant_type_flatten.locD:
 	
 	orq %rcx, %rax
@@ -149,7 +152,7 @@ zombie_type_flatten:
 	
 	cmpl $100, %ecx
 	jc   zombie_type_flatten.locB
-		subl $50, %ecx
+		subl $43, %ecx
 	zombie_type_flatten.locB:
 	
 	negq %rax
@@ -175,9 +178,9 @@ zombie_type_widen:
 	
 	negq %rax
 	
-	cmpl $50, %ecx
+	cmpl $57, %ecx
 	jc zombie_type_widen.locB
-		addl $50, %ecx
+		addl $43, %ecx
 	zombie_type_widen.locB:
 	
 	cmpl $120, %ecx
@@ -270,13 +273,41 @@ plant_type_flatten_menu: #for ease of use, this function saves all registers exc
 	popq %r8
 	ret
 
-"CardUI::Awake(&mut self)+0x158":
+"CardUI::Awake(&mut self)+0x2C5":
 	call set_text_size
-"ENDCardUI::Awake(&mut self)+0x158":
+"ENDCardUI::Awake(&mut self)+0x2C5":
 
-"CardUI::Awake(&mut self)+0x240":
-	call set_text_size
-"ENDCardUI::Awake(&mut self)+0x240":
+"CardUI::Update(&mut self)+0x10D":
+	jmp set_text_size_2
+"ENDCardUI::Update(&mut self)+0x10D":
+
+set_text_size_2:
+	pushq %rax
+	subq  $0x28, %rsp
+	cmpq $0, fetch_cooldown_ptr(%rip)
+	sete %al
+	cmpq $0, fetch_firerate_ptr(%rip)
+	sete %ah
+	andb %ah, %al
+	jne  set_text_size_2.locA
+		movq %rdi, %rcx
+		movb $1,     %dl
+		call "TMPro::TMP_Text::set_enableAutoSizing(&mut self, value: bool)"
+		
+		movq  %rdi, %rcx
+		movss packet_font_size(%rip), %xmm1
+		call  "TMPro::TMP_Text::set_fontSizeMin(&mut self, value: f32)"
+		
+		movq  %rdi, %rcx
+		movss packet_font_size(%rip), %xmm1
+		call  "TMPro::TMP_Text::set_fontSizeMax(&mut self, value: f32)"
+	set_text_size_2.locA:
+	
+	addq $0x28, %rsp
+	popq %rax
+	testq %rdi, %rdi
+	je "CardUI::Update(&mut self)"+0x123
+	jmp "CardUI::Update(&mut self)"+0x112
 
 set_text_size:
 	pushq %rbp
@@ -308,9 +339,9 @@ set_text_size:
 	popq %rbp
 	ret
 
-"CardUI::Awake(&mut self)+0x24F":
+"CardUI::Awake(&mut self)+0x2D4":
 	call card_create_label
-"ENDCardUI::Awake(&mut self)+0x24F":
+"ENDCardUI::Awake(&mut self)+0x2D4":
 
 "CardUI::Update(&mut self)+0x108":
 	call card_create_label
@@ -424,9 +455,8 @@ card_create_label: #seed packet cost in ecx
 	leaq (%rbp,%r15,2), %rdi
 	leaq (%rdi,%r14,8), %rdi
 	subq %rcx,          %rsi
-	shrl $1,            %ecx
 	
-	rep movsw #slower than rep movsb on fast small rep movsb systems
+	rep movsb
 	
 	addq $0x48,       %rsp
 	movq %rbp,        %rax
@@ -459,7 +489,7 @@ wait_on_rust:
 	ret
 
 rerandomise:
-	movl %esi, GameAPP.theBoardType(%rcx)
+	movl %edi, GameAPP.theBoardLevel(%rcx)
 	movq %rcx, game_app_ptr(%rip)
 	movl $1, GameAPP.advantureZhouMu(%rcx)
 	cmpq $0,   mix_data_ptr(%rip)
@@ -549,7 +579,7 @@ menu_init_array:
 	.long "PlantType::SeaShroom";     .long 19
 	.long "PlantType::Plantern";      .long 20
 	.long "PlantType::Cactus";        .long 21
-	.long "PlantType::Blower";        .long 22
+	.long "PlantType::Blover";        .long 22
 	.long "PlantType::StarFruit";     .long 23
 	.long "PlantType::Pumpkin";       .long 24
 	.long "PlantType::Magnetshroom";  .long 25

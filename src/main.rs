@@ -131,7 +131,6 @@ impl App {
     
     fn poll_thread(ctxt: Context, prx: Receiver<AppEvent>, ptx: Sender<AsmEvent>, mut fusion: FusionProcess) {
         let mut dumper = IL2CppDumper::initialize(&fusion.files_dir).unwrap();
-        init_defaults_from_dump(&dumper);
         
         let base_patch      = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/base.o"))).unwrap();
         let tutorials_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/tutorials.o"))).unwrap();
@@ -179,6 +178,8 @@ impl App {
             }
         }
         
+        init_defaults_from_dump(&dumper);
+        
         let sym_tab: FxHashMap<String, u64> = Patch::apply_patches(&[
             base_patch,
             tutorials_patch,
@@ -193,9 +194,9 @@ impl App {
         
         let mut level_idx = 0;
         
-        let level_addr    = *sym_tab.get("level_idx").unwrap();
-        let wait_addr     = *sym_tab.get("stopped").unwrap();
-        let mix_ptr_addr  = *sym_tab.get("mix_data_ptr").unwrap();
+        let level_addr   = *sym_tab.get("level_idx").unwrap();
+        let wait_addr    = *sym_tab.get("stopped").unwrap();
+        let mix_ptr_addr = *sym_tab.get("mix_data_ptr").unwrap();
         //let game_ptr_addr = *sym_tab.get("game_app_ptr").unwrap();
         let mut initialized  = false;
         let mut mem_read_vec = Vec::new();
@@ -231,6 +232,7 @@ impl App {
                     break;
                 }
             }
+            
             if let Err(err) = fusion.read_memory(wait_addr, 1, &mut mem_read_vec) {
                 match err.downcast::<CommonError>() {
                     Err(err) => panic!("Failed to read memory: {err}"),

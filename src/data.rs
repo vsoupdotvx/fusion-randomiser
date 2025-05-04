@@ -81,7 +81,7 @@ pub enum ZombieType {
     KirovZombie,
     SnowDolphinrider,
     MinerZombie,
-    IronBallonZombie,
+    IronBalloonZombie,
     SuperJackboxZombie,
     CatapultZombie,
     PogoZombie,
@@ -102,6 +102,13 @@ pub enum ZombieType {
     SnowZombie,
     NewYearZombie,
     SnowGunZombie,
+    SnowShieldZombie,
+    SnowDrownZombie,
+    ProtalZombie,
+    LevatationZombie,
+    IceZombie,
+    SnowMonsterZombie,
+    TrainingDummy,
     PeaShooterZombie,
     CherryShooterZombie,
     SuperCherryShooterZombie,
@@ -121,7 +128,7 @@ pub enum ZombieType {
     JalaSquashZombie,
     JalapenoZombie,
     GatlingFootballZombie,
-    IronBallonZombie2,
+    IronBalloonZombie2,
     SuperSubmarine,
     JacksonDriver,
     FootballDrown,
@@ -147,6 +154,9 @@ pub enum ZombieType {
     UltimateJacksonDriver,
     UltimatePaperZombie,
     UltimateJackboxZombie,
+    GatlingBlackFootball,
+    LegionZombie,
+    IceClawZombie,
 }
 
 #[allow(dead_code)]
@@ -174,7 +184,7 @@ pub enum Unlockable {
     SeaShroom,
     Plantern,
     Cactus,
-    Blower,
+    Blover,
     StarFruit,
     Pumpkin,
     Magnetshroom,
@@ -662,7 +672,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
                 ZombieType::SnowDolphinrider,
                 ZombieType::KirovZombie,
                 ZombieType::SuperJackboxZombie,
-                ZombieType::IronBallonZombie,
+                ZombieType::IronBalloonZombie,
             ],
             flags: Some(4),
             level_type: LevelType::Fog,
@@ -672,7 +682,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
                 Unlockable::StarFruit,
                 Unlockable::Cactus,
                 Unlockable::Plantern,
-                Unlockable::Blower,
+                Unlockable::Blover,
                 Unlockable::Pumpkin,
                 Unlockable::IceShroom,
                 Unlockable::Magnetshroom,
@@ -1022,7 +1032,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //1D
-            zombie_type: ZombieType::IronBallonZombie,
+            zombie_type: ZombieType::IronBalloonZombie,
             name: "Metal balloon",
             default_weight: 1000,
             default_points: 5,
@@ -1179,9 +1189,65 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //31
             zombie_type: ZombieType::SnowGunZombie,
             name: "Snowblower",
-            default_weight: 500,
-            default_points: 8,
+            default_weight: 1000,
+            default_points: 3,
             flags: ZombieFlags::IS_ODYSSEY | ZombieFlags::EVIL_DEATH,
+            ..ZombieData::default()
+        },
+        ZombieData { //32
+            zombie_type: ZombieType::SnowShieldZombie,
+            name: "Shield guy",
+            default_weight: 1500,
+            default_points: 3,
+            flags: ZombieFlags::HIGH_HEALTH,
+            ..ZombieData::default()
+        },
+        ZombieData { //33
+            zombie_type: ZombieType::SnowDrownZombie,
+            name: "???",
+            default_weight: 1500,
+            default_points: 3,
+            flags: ZombieFlags::NONE,
+            ..ZombieData::default()
+        },
+        ZombieData { //34
+            zombie_type: ZombieType::ProtalZombie,
+            name: "Portal guy",
+            default_weight: 500,
+            default_points: 3,
+            flags: ZombieFlags::IS_ODYSSEY,
+            ..ZombieData::default()
+        },
+        ZombieData { //35
+            zombie_type: ZombieType::LevatationZombie,
+            name: "Snow UFO",
+            default_weight: 750,
+            default_points: 7,
+            flags: ZombieFlags::FLIES,
+            ..ZombieData::default()
+        },
+        ZombieData { //36
+            zombie_type: ZombieType::TrainingDummy,
+            name: "Dummy",
+            default_weight: 0,
+            default_points: 1,
+            flags: ZombieFlags::IS_ODYSSEY,
+            ..ZombieData::default()
+        },
+        ZombieData { //37
+            zombie_type: ZombieType::IceZombie,
+            name: "Ice cube",
+            default_weight: 3000,
+            default_points: 7,
+            flags: ZombieFlags::NONE,
+            ..ZombieData::default()
+        },
+        ZombieData { //38
+            zombie_type: ZombieType::SnowMonsterZombie,
+            name: "Fluffy creature",
+            default_weight: 750, //actually has a weight of 0, but it looks cute so i'm allowing it to spawn
+            default_points: 1,
+            flags: ZombieFlags::NONE,
             ..ZombieData::default()
         },
         ZombieData { //64
@@ -1332,7 +1398,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
             ..ZombieData::default()
         },
         ZombieData { //77
-            zombie_type: ZombieType::IronBallonZombie2,
+            zombie_type: ZombieType::IronBalloonZombie2,
             name: "Iron pea balloon",
             default_weight: 1000,
             default_points: 5,
@@ -1538,6 +1604,30 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         ZombieData { //E0
             zombie_type: ZombieType::UltimateJackboxZombie,
             name: "Ultra jack",
+            default_weight: 0,
+            default_points: 10,
+            flags: ZombieFlags::IS_ODYSSEY,
+            ..ZombieData::default()
+        },
+        ZombieData { //38
+            zombie_type: ZombieType::GatlingBlackFootball,
+            name: "Gatling rugby zombie",
+            default_weight: 0,
+            default_points: 10,
+            flags: ZombieFlags::IS_ODYSSEY,
+            ..ZombieData::default()
+        },
+        ZombieData { //38
+            zombie_type: ZombieType::LegionZombie,
+            name: "???",
+            default_weight: 0,
+            default_points: 10,
+            flags: ZombieFlags::IS_ODYSSEY,
+            ..ZombieData::default()
+        },
+        ZombieData { //38
+            zombie_type: ZombieType::IceClawZombie,
+            name: "???",
             default_weight: 0,
             default_points: 10,
             flags: ZombieFlags::IS_ODYSSEY,

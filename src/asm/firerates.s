@@ -22,13 +22,13 @@
 	.endif
 .endm
 
-"Plant::PlantShootUpdate(&mut self)+0x5A":
+"Plant::PlantShootUpdate(&mut self)+0x5C":
 	call plant_get_firerate
-"ENDPlant::PlantShootUpdate(&mut self)+0x5A":
+"ENDPlant::PlantShootUpdate(&mut self)+0x5C":
 
 plant_get_firerate:
-	movl Plant.thePlantType(%rbx), %edx
-	cmpl $1192, %edx #MAX_PLANT
+	movl Plant.thePlantType(%rbx), %ecx
+	cmpl $1227, %ecx #MAX_PLANT
 	ja   plant_get_firerate.locA
 		call     plant_type_flatten
 		

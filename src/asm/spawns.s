@@ -87,29 +87,29 @@ pick_zombie:
 	popq %rbp
 	ret
 
-"Zombie::InitHealth(&mut self)+0x18B":
+"Zombie::InitHealth(&mut self)+0x188":
 	call  show_text_if_preview_1
 	.nops 2
-"ENDZombie::InitHealth(&mut self)+0x18B":
+"ENDZombie::InitHealth(&mut self)+0x188":
 
-"CreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject+0x5BC":
-	jne show_text_if_preview_2
-"ENDCreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject+0x5BC":
+#"CreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject+0x652":
+#	jne show_text_if_preview_2
+#"ENDCreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject+0x652":
 
-"Zombie::UpdateHealthText(&mut self)+0x8E":
+"Zombie::UpdateHealthText(&mut self)+0x9A":
 	call set_zombie_txt
-"ENDZombie::UpdateHealthText(&mut self)+0x8E":
+"ENDZombie::UpdateHealthText(&mut self)+0x9A":
 
 show_text_if_preview_1:
 	movzbl Board.showZombieHealth(%rdx), %edx
 	orb    on_seed_select(%rip), %dl
 	ret
 
-show_text_if_preview_2:
-	movq %rdi, %rcx
-	xorl %edx, %edx
-	call "Zombie::InitHealth(&mut self)"
-	jmp  "CreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject"+0x82D
+#show_text_if_preview_2:
+#	movq %rdi, %rcx
+#	xorl %edx, %edx
+#	call "Zombie::InitHealth(&mut self)"
+#	jmp  "CreateZombie::SetZombie(&mut self, theRow: i32, theZombieType: ZombieType, theX: f32, isIdle: bool) -> UnityEngine::GameObject"+0x77F
 
 set_zombie_txt:
 	cmpb $0, on_seed_select(%rip)
@@ -198,7 +198,7 @@ set_zombie_txt:
 	movq %rsi, 0x38(%rsp)
 	movq %r14, 0x30(%rsp)
 	movq Zombie.healthText(%rdi), %r14
-	jmp  "Zombie::UpdateHealthText(&mut self)"+0x337
+	jmp  "Zombie::UpdateHealthText(&mut self)"+0x358
 
 int_2_string_fast:
 	pxor     %xmm2,             %xmm2

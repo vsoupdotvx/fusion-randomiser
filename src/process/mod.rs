@@ -524,7 +524,7 @@ impl FusionProcess {
         dll_file.read_exact(&mut dll_data)?;
         let dll_data = dll_data.into_boxed_slice();
         let dll_obj = object::File::parse(&*dll_data)?;
-        let dll_text = dll_obj.section_by_name(".text").unwrap().data()?;
+        let dll_text = dll_obj.section_by_name("il2cpp").unwrap().data()?;
         let mut text_buf = vec![0u8; dll_text.len()];
         let mut dll_offset = None;
         let mut dll_text_end = None;
@@ -533,6 +533,7 @@ impl FusionProcess {
         let mapping_strings: Vec<&str> = mappings_string.split('\n').collect();
         let mut map_ranges: Vec<(u64, u64)> = Vec::with_capacity(mapping_strings.len() - 1);
         let mut check_next: Option<(u64, u64)> = None;
+        let mut check_next_next: Option<(u64, u64)> = None;
         
         for mapping_string in &mapping_strings {
             if mapping_string.is_empty() {
@@ -552,10 +553,12 @@ impl FusionProcess {
                     }
                 }
             }
+            
+            check_next = check_next_next;
             if mapping_components.len() > 5 {
-                check_next = Some((start, end));
+                check_next_next = Some((start, end));
             } else {
-                check_next = None
+                check_next_next = None;
             }
             map_ranges.push((start, end));
         }

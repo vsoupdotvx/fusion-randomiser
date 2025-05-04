@@ -1,17 +1,18 @@
 .section .text
 
-"CardUI::Awake(&mut self)+0xE1":
+"CardUI::Awake(&mut self)+0x173":
 	call cmp_and_store_cost
 	nop
-"ENDCardUI::Awake(&mut self)+0xE1":
+"ENDCardUI::Awake(&mut self)+0x173":
 
 cmp_and_store_cost:
-	movl CardUI.theSeedCost(%rbx), %edx
-	movl CardUI.theSeedType(%rbx), %ecx
-	cmpl $1181, %ecx
-	ja   cmp_and_store_cost.locA
+	pushq %rdx
+	movl  %eax, %edx
+	movl  CardUI.theSeedType(%rbx), %ecx
+	cmpl  $1227, %ecx
+	ja    cmp_and_store_cost.locA
 		call plant_type_flatten_menu
-		cmpl $41, %eax
+		cmpl $48, %eax
 		jnc  cmp_and_store_cost.locA
 			leaq     plant_cost_table(%rip), %rcx
 			movzbl   (%rcx,%rax),     %ecx
@@ -29,8 +30,9 @@ cmp_and_store_cost:
 	cmp_and_store_cost.locA:
 	
 	movl    %edx, CardUI.theSeedCost(%rbx)
-	xorps   %xmm0, %xmm0
+	movl    %edx,   %eax
 	ucomiss %xmm0, %xmm1
+	popq    %rdx
 	ret
 
 .section .data

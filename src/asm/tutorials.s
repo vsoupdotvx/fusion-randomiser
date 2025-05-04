@@ -6,66 +6,66 @@
 
 
 
-"TutorManager::TutorUpdate1(&mut self)+0x3F8":
-	.nops 2
-"ENDTutorManager::TutorUpdate1(&mut self)+0x3F8":
-
-"TutorManager::TutorUpdate1(&mut self)+0x5B7":
-	.nops 2
-"ENDTutorManager::TutorUpdate1(&mut self)+0x5B7":
-
-
-
-"TutorManager::TutorUpdate4(&mut self)+0xE8":
+"TutorManager::TutorUpdate1(&mut self)+0x437":
 	.nops 6
-"ENDTutorManager::TutorUpdate4(&mut self)+0xE8":
+"ENDTutorManager::TutorUpdate1(&mut self)+0x437":
 
-
-
-"TutorManager::TutorUpdate7(&mut self)+0x23C":
+"TutorManager::TutorUpdate1(&mut self)+0x567":
 	.nops 2
-"ENDTutorManager::TutorUpdate7(&mut self)+0x23C":
+"ENDTutorManager::TutorUpdate1(&mut self)+0x567":
 
-"TutorManager::TutorUpdate7(&mut self)+0xFD":
+
+
+"TutorManager::TutorUpdate4(&mut self)+0xDC":
 	.nops 6
-"ENDTutorManager::TutorUpdate7(&mut self)+0xFD":
+"ENDTutorManager::TutorUpdate4(&mut self)+0xDC":
 
 
 
-"TutorManager::TutorUpdate8(&mut self)+0x2B3":
+"TutorManager::TutorUpdate7(&mut self)+0x21A":
 	.nops 2
-"ENDTutorManager::TutorUpdate8(&mut self)+0x2B3":
+"ENDTutorManager::TutorUpdate7(&mut self)+0x21A":
 
-"TutorManager::TutorUpdate8(&mut self)+0x173":
+"TutorManager::TutorUpdate7(&mut self)+0xE9":
+	.nops 6
+"ENDTutorManager::TutorUpdate7(&mut self)+0xE9":
+
+
+
+"TutorManager::TutorUpdate8(&mut self)+0x298":
+	.nops 2
+"ENDTutorManager::TutorUpdate8(&mut self)+0x298":
+
+"TutorManager::TutorUpdate8(&mut self)+0x166":
 	jmp "TutorManager::TutorUpdate8.locL"
 	nop
-"ENDTutorManager::TutorUpdate8(&mut self)+0x173":
+"ENDTutorManager::TutorUpdate8(&mut self)+0x166":
 
 
 
-"TutorManager::TutorUpdate13(&mut self)+0x337":
+"TutorManager::TutorUpdate13(&mut self)+0x394":
 	.nops 6
-"ENDTutorManager::TutorUpdate13(&mut self)+0x337":
+"ENDTutorManager::TutorUpdate13(&mut self)+0x394":
 
-"TutorManager::TutorUpdate13(&mut self)+0x597":
+"TutorManager::TutorUpdate13(&mut self)+0x4E4":
 	.nops 6
-"ENDTutorManager::TutorUpdate13(&mut self)+0x597":
+"ENDTutorManager::TutorUpdate13(&mut self)+0x4E4":
 
 
 
-"TutorManager::TutorUpdate22(&mut self)+0x12A":
+"TutorManager::TutorUpdate22(&mut self)+0x117":
 	.nops 2
-"ENDTutorManager::TutorUpdate22(&mut self)+0x12A":
+"ENDTutorManager::TutorUpdate22(&mut self)+0x117":
 
 
 
-"TutorManager::TutorUpdate24(&mut self)+0xAD":
+"TutorManager::TutorUpdate24(&mut self)+0xA1":
 	.nops 6
-"ENDTutorManager::TutorUpdate24(&mut self)+0xAD":
+"ENDTutorManager::TutorUpdate24(&mut self)+0xA1":
 
-"TutorManager::TutorUpdate24(&mut self)+0x118":
+"TutorManager::TutorUpdate24(&mut self)+0x105":
 	.nops 6
-"ENDTutorManager::TutorUpdate24(&mut self)+0x118":
+"ENDTutorManager::TutorUpdate24(&mut self)+0x105":
 
 
 

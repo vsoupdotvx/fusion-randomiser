@@ -1,15 +1,15 @@
 .section .text
 
-"CardUI::Awake(&mut self)+0xDC":
+"CardUI::Awake(&mut self)+0x17E":
 	call store_cooldown
-"ENDCardUI::Awake(&mut self)+0xDC":
+"ENDCardUI::Awake(&mut self)+0x17E":
 
 store_cooldown:
-	pushq  %rax
+	pushq %rax
+	pushq %rdx
 	
-	movss CardUI.fullCD(%rbx), %xmm1
 	movl CardUI.theSeedType(%rbx), %ecx
-	cmpl $1181, %ecx
+	cmpl $1227, %ecx
 	ja   store_cooldown.locA
 		call plant_type_flatten_menu
 		cmpl $48, %eax
@@ -25,11 +25,11 @@ store_cooldown:
 			jrcxz    store_cooldown.locB
 				mulss const0.5(%rip), %xmm0
 			store_cooldown.locB:
-			mulss %xmm0, %xmm1
+			mulss %xmm0, %xmm2
 	store_cooldown.locA:
 	
-	movss %xmm1, CardUI.fullCD(%rbx)
-	movss CardUI.CD(%rbx), %xmm1
+	movss %xmm2, CardUI.fullCD(%rbx)
+	popq  %rdx
 	popq  %rax
 	ret
 

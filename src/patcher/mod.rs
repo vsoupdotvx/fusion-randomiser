@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::BuildHasherDefault, io::Write, num::NonZeroU64, ops::Range};
 use fxhash::FxHashMap;
-use iced_x86::{Code, Decoder, DecoderOptions, Encoder, Formatter, GasFormatter, Instruction, Mnemonic, OpKind};
+use iced_x86::{Code, Decoder, DecoderOptions, Encoder, Formatter, GasFormatter, Instruction, Mnemonic, OpKind, SymbolResolver, SymbolResult};
 use object::{File, Object, ObjectSection, ObjectSymbol, Relocation, RelocationKind, RelocationTarget, Section, SectionKind, Symbol, SymbolKind};
 use smallvec::SmallVec;
 
@@ -312,7 +312,7 @@ impl Patch {
                             _ => {}
                         }
                         if imm_replace {
-                            *imm = Immediate::PatchInstructionOffset(injections.len(), *rev_imm_lookup.get(imm_idx).unwrap() - start_idx);
+                            *imm = Immediate::PatchInstructionOffset(injections.len(), rev_imm_lookup.get(imm_idx).unwrap().wrapping_sub(start_idx));
                         }
                     }
                     
@@ -609,7 +609,12 @@ impl Patch {
                             None,
                             None,
                         );
-                        encoder.encode(&instruction, text_section_off + current_offset as u64).expect("Phase 2 encoding error") as u32
+                        encoder.encode(&instruction, text_section_off + current_offset as u64).unwrap_or_else(|err| {
+                            panic!(
+                                "Phase 2 encoding error: {err}\nInstruction: {}",
+                                display_instruction(&original_instruction, &patch.imm_vec, &il2cpp_syms),
+                            );
+                        }) as u32
                     }
                 };
                 current_offset += instruction_len;
@@ -947,7 +952,7 @@ fn fill_in_imms_phase_2(
                             let addr = local_sym_tab.get(&format!("\"{sym_name}\"")).expect("Undefined symbol found while filling in immediates (phase 2)");
                             instruction.set_near_branch64((*addr as i64 + 4 + addend) as u64); //this +4 is important TODO: only add 4 for relative
                         } else {
-                            panic!("Undefined symbol found while filling in immediates (phase 2)");
+                            panic!("Undefined symbol found while filling in immediates (phase 2): {sym_name}");
                         }
                     }
                     Immediate::InstructionOffset(idx) |
@@ -1557,4 +1562,75 @@ fn reloc_to_immediate(
         }
         _ => panic!("Unimplemented relocation target")
     }
+}
+
+struct DebugSymResolver {
+    imm_vec: *const [Immediate],
+    sym_tab: *const FxHashMap<String,u64>
+}
+
+impl DebugSymResolver {
+    fn new(imm_vec: *const [Immediate], sym_tab: *const FxHashMap<String,u64>) -> Self {
+        Self {
+            imm_vec,
+            sym_tab,
+        }
+    }
+}
+
+impl SymbolResolver for DebugSymResolver {
+    fn symbol(&mut self, instruction: &Instruction, operand: u32, _instruction_operand: Option<u32>, addr: u64, _addr_size: u32) -> Option<SymbolResult> {
+        let imm_vec = unsafe { &*self.imm_vec };
+        let _sym_tab = unsafe { &*self.sym_tab };
+        let zero_imm = Immediate::Immediate(0);
+        let imm = match instruction.op_kind(operand) {
+            OpKind::NearBranch64 => {
+                &imm_vec[instruction.near_branch_target() as usize]
+            }
+            OpKind::Memory => {
+                match instruction.mnemonic() {
+                    Mnemonic::Nop => { &zero_imm }
+                    _ => {
+                        &imm_vec[instruction.memory_displacement64() as usize]
+                    }
+                }
+            }
+            OpKind::Immediate8 |
+            OpKind::Immediate16 |
+            OpKind::Immediate32 |
+            OpKind::Immediate64 |
+            OpKind::Immediate8to16 |
+            OpKind::Immediate8to32 |
+            OpKind::Immediate8to64 |
+            OpKind::Immediate32to64 => {
+                &imm_vec[instruction.immediate32to64() as usize]
+            }
+            _ => { &zero_imm }
+        };
+        
+        match imm {
+            Immediate::Immediate(imm) => {
+                Some(SymbolResult::with_string(addr, imm.to_string()))
+            }
+            Immediate::UnresolvedSymbolRel(name, addend) |
+            Immediate::UnresolvedSymbol(name, addend) => {
+                Some(SymbolResult::with_string(addr.wrapping_add(*addend as u64), name.clone()))
+            }
+            _ => {
+                None
+            }
+        }
+    }
+}
+
+fn display_instruction(
+    instruction: &Instruction,
+    imm_vec: &[Immediate],
+    sym_tab: &FxHashMap<String,u64>,
+) -> String {
+    let sym_resolver = Box::new(DebugSymResolver::new(imm_vec as *const [Immediate], sym_tab as *const FxHashMap<String,u64>));
+    let mut ret = String::new();
+    let mut formatter = GasFormatter::with_options(Some(sym_resolver), None);
+    formatter.format(&instruction, &mut ret);
+    ret
 }
