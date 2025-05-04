@@ -1204,7 +1204,7 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
         },
         ZombieData { //33
             zombie_type: ZombieType::SnowDrownZombie,
-            name: "???",
+            name: "Snow trident",
             default_weight: 1500,
             default_points: 3,
             flags: ZombieFlags::NONE,
