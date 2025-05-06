@@ -2,7 +2,7 @@
 use std::{collections::HashMap, env, path::PathBuf, sync::{mpsc::{self, Receiver, Sender}, Arc}, thread::{self, sleep, JoinHandle}, time::Duration};
 
 use data::{init_defaults_from_dump, LevelType, LEVEL_DATA, ZOMBIE_DATA};
-use eframe::egui::{self, Align, Context, RichText};
+use eframe::egui::{self, Align, Context, RichText, Slider};
 use egui_file_dialog::FileDialog;
 use egui_plot::{Legend, Line, Plot};
 use fxhash::FxHashMap;
@@ -47,7 +47,9 @@ struct Cfg {
     spawns_enabled:    bool,
     tweaks_enabled:    bool,
     restrictions:      bool,
+    sounds:            bool,
     seed:            String,
+    sound_chance:       f32,
 }
 
 struct FusionData {
@@ -84,12 +86,14 @@ impl App {
             level_ui_data: None,
             cfg: Cfg {
                 firerates_enabled: true,
-                costs_enabled: true,
+                costs_enabled:     true,
                 cooldowns_enabled: true,
-                spawns_enabled: true,
-                tweaks_enabled: true,
-                restrictions:   true,
+                spawns_enabled:    true,
+                tweaks_enabled:    true,
+                restrictions:      true,
+                sounds:           false,
                 seed,
+                sound_chance: 0.2,
             },
         };
         
@@ -139,6 +143,7 @@ impl App {
         let cooldowns_patch = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/cooldowns.o"))).unwrap();
         let spawns_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/spawns.o"))).unwrap();
         let tweaks_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/tweaks.o"))).unwrap();
+        let sounds_patch    = Patch::new(include_bytes!(concat!(env!("OUT_DIR"), "/sounds.o"))).unwrap();
         
         let mut cfg = Cfg {
             firerates_enabled: false,
@@ -147,7 +152,9 @@ impl App {
             spawns_enabled:    false,
             tweaks_enabled:    false,
             restrictions:      false,
+            sounds:            false,
             seed:     "".to_string(),
+            sound_chance:        0.0,
         };
         
         for event in prx.iter() {
@@ -188,6 +195,7 @@ impl App {
             cooldowns_patch,
             spawns_patch,
             tweaks_patch,
+            sounds_patch,
         ], &dumper, &mut fusion);
         
         println!("Game patched!");
@@ -337,6 +345,10 @@ impl App {
                 if let Some(firerates) = &rand_data.firerates {
                     fusion.write_memory(*sym_tab.get("plant_firerate_table").unwrap(), &firerates[level_idx as usize]).unwrap();
                 }
+                if let Some(sound_seeds) = &rand_data.sound_seeds {
+                    fusion.write_memory(*sym_tab.get("sound_rng_seed").unwrap(), &sound_seeds[level_idx as usize].to_le_bytes()).unwrap();
+                    fusion.write_memory(*sym_tab.get("sound_chance").unwrap(), &((if cfg.sounds {cfg.sound_chance} else {0.0} * 4294967296.) as u64).to_le_bytes()).unwrap();
+                }
                 
                 let zombie_data = ZOMBIE_DATA.get().unwrap();
                 let freq_data = rand_data.compute_zombie_freq_data_cached(&spawn_vec, rand_data.level_order[level_idx as usize] as usize).unwrap();
@@ -484,20 +496,42 @@ The range of randomisation is between 0.1x weight and 10x weight, with heavy bia
                             
                         });
                         ui.allocate_ui_with_layout(size, layout, |ui| {
-                            ui.checkbox(&mut self.cfg.tweaks_enabled, "Balance tweaks").on_hover_ui(|ui| {
-                                ui.label("Balance tweaks changes certain things for the balance of the randomiser.
-This currently does nothing except makes the entire almanac unlocked from the beginning.
-More will likely be added in the future.");
+                            ui.checkbox(&mut self.cfg.sounds, "Random sounds").on_hover_ui(|ui| {
+                                ui.label("Random sounds randomises sounds, with each sound having an x% chance to be randomised.");
                             });
                             
                         });
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        if self.submitted {ui.disable();}
+                        let layout = ui.layout().clone().with_main_justify(true).with_main_align(Align::Min);
+                        let size: egui::Vec2 = [135.0, 20.0].into();
+                        let size_x2: egui::Vec2 = [270.0, 20.0].into();
                         ui.allocate_ui_with_layout(size, layout, |ui| {
                             ui.checkbox(&mut self.cfg.restrictions, "Restrictions").on_hover_ui(|ui| {
                                 ui.label("Restrictions adds restrictions on the randomisation to make the game possible to beat.
 Without restrictions, you can get water levels with no water solutions, 4 flag roof levels with no pot, dark michael spam on your second level, etc.
 Highly recommended.");
                             });
+                        });
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            ui.checkbox(&mut self.cfg.tweaks_enabled, "Balance tweaks").on_hover_ui(|ui| {
+                                ui.label("Balance tweaks changes certain things for the balance of the randomiser.
+This currently does nothing except makes the entire almanac unlocked from the beginning.
+More will likely be added in the future.");
+                            });
+                        });
+                        ui.allocate_ui_with_layout(size_x2, layout, |ui| {
+                            ui
+                                .style_mut()
+                                .text_styles
+                                .get_mut(&egui::TextStyle::Body)
+                                .unwrap().size = ui.style().text_styles.get(&egui::TextStyle::Button).unwrap().size;
                             
+                            ui.add_enabled(self.cfg.sounds, Slider::new(&mut self.cfg.sound_chance, 0.0..=1.0)).on_hover_ui(|ui| {
+                                ui.label("The chance for any given sound to be randomised");
+                            });
+                            ui.label("Sound chance");
                         });
                     });
                 });

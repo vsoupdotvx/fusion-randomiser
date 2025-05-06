@@ -11,6 +11,7 @@ use crate::data::ZOMBIE_DATA;
 pub struct RandomisationData {
     pub level_order:   Vec<u8>,
     pub plant_order:   Vec<u8>,
+    pub sound_seeds:   Option<Vec<u64>>,
     pub weights:       Option<Vec<Vec<u8>>>,
     pub firerates:     Option<Vec<Vec<u8>>>,
     pub cooldowns:     Option<Vec<Vec<u8>>>,
@@ -244,15 +245,18 @@ impl RandomisationData {
             freqs.push(data.totals);
         }
         
+        let sound_seeds = Self::randomise_sounds(seed ^ hash_str("Sounds"));
+        
         Self {
             level_order,
             plant_order,
-            weights:   Some(weights),
-            firerates: Some(firerates),
-            cooldowns: Some(cooldowns),
-            costs:     Some(costs),
-            spawns:    Some(spawns),
-            freqs:     Some(freqs),
+            weights:     Some(weights),
+            firerates:   Some(firerates),
+            cooldowns:   Some(cooldowns),
+            costs:       Some(costs),
+            spawns:      Some(spawns),
+            freqs:       Some(freqs),
+            sound_seeds: Some(sound_seeds),
             restrictions_data: None,
         }
     }
@@ -475,7 +479,14 @@ impl RandomisationData {
         }
     }
     
-    
+    fn randomise_sounds(seed: u64) -> Vec<u64> {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(hash_str("random_sounds")));
+        let mut ret = Vec::with_capacity(45);
+        for _ in 0..45 {
+            ret.push(rng.next_u64());
+        }
+        ret
+    }
     
     
     
@@ -2516,6 +2527,8 @@ impl RandomisationData {
         let mut weights_rng = ChaCha8Rng::seed_from_u64(seed ^ hash_str("zombie_weights"));
         let mut plants_rng  = ChaCha8Rng::seed_from_u64(seed ^ hash_str("plant_order"));
         
+        let sound_seeds = Self::randomise_sounds(seed ^ hash_str("Sounds"));
+        
         let mut ret = Self {
             level_order: Vec::with_capacity(45),
             plant_order: vec![0xFF; 48],
@@ -2525,6 +2538,7 @@ impl RandomisationData {
             costs: Some(Vec::new()),
             spawns: Some(Vec::new()),
             freqs: Some(Vec::new()),
+            sound_seeds: Some(sound_seeds),
             restrictions_data: Some(RestrictionsData {
                 frequency_cache: HashMap::default(),
                 level_spawns: HashMap::default(),
