@@ -67,7 +67,7 @@ pub struct IL2CppDumper {
     pub method_addr_table:    FxHashMap<u64,u32>,
     field_default_lookup:     FxHashMap<i32,u32>,
     icgm_array:                        Vec<Icgm>,
-    types_array:                 Vec<IL2CppType>,
+    pub types_array:                 Vec<IL2CppType>,
     generic_class_array: Vec<IL2CppGenericClass>,
     
     version:                       u32,
@@ -194,7 +194,7 @@ impl IL2CppType {
             valuetype: (bits >> 31) & 0x1 == 1,
         }
     }
-    fn name(&self, meta: &IL2CppDumper) -> (String, Option<u32>) {
+    pub fn name(&self, meta: &IL2CppDumper) -> (String, Option<u32>) {
         self.name_helper(meta, false)
     }
     fn name_helper(&self, meta: &IL2CppDumper, nested: bool) -> (String, Option<u32>) {
@@ -662,12 +662,12 @@ impl IL2CppStruct {
         ret
     }
     
-    fn get_field_name_at_off(&self, idx: u32, off: u64, meta: &IL2CppDumper) -> String {
-        self.get_field_name_at_off_internal(idx, off, 0, meta)
+    fn get_field_name_at_off(&self, idx: u32, off: u64, statik: bool, meta: &IL2CppDumper) -> String {
+        self.get_field_name_at_off_internal(idx, off, statik, meta, 0)
     }
     
-    fn get_field_name_at_off_internal(&self, idx: u32, off: u64, recursion: u32, meta: &IL2CppDumper) -> String {
-        if let Some((field, field_off, _strukt_idx)) = self.get_field_type_at_off(idx, off, meta) {
+    fn get_field_name_at_off_internal(&self, idx: u32, off: u64, statik: bool, meta: &IL2CppDumper, recursion: u32) -> String {
+        if let Some((field, field_off, _strukt_idx)) = self.get_field_type_at_off(idx, off, statik, meta) {
             let mut ret = meta.get_string(field.name_off).to_string();
             
             if let Some(struct_idx) = meta.types_array[field.type_idx as usize].get_struct_noref() {
@@ -677,7 +677,7 @@ impl IL2CppStruct {
                 );
                 if strukt.flags & 0x2000 != 0 && recursion < 5 {
                 //if recursion < 5 {
-                    format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off.wrapping_sub(field_off as u64), recursion + 1, meta))
+                    format_to!(ret, ".{}", strukt.get_field_name_at_off_internal(struct_idx, off.wrapping_sub(field_off as u64), statik, meta, recursion + 1))
                 } else if field_off != off as u32 {
                     format_to!(ret, "+0x{:X}", (off as u32).wrapping_sub(field_off))
                 }
@@ -691,19 +691,20 @@ impl IL2CppStruct {
         }
     }
     
-    fn get_field_type_at_off(&self, idx: u32, off: u64, meta: &IL2CppDumper) -> Option<(IL2CppField, u32, u32)> {
+    fn get_field_type_at_off(&self, idx: u32, off: u64, statik: bool, meta: &IL2CppDumper) -> Option<(IL2CppField, u32, u32)> {
         if self.field_start.is_negative() || self.field_count == 0 {
             if let Some(struct_idx) = self.get_parent_struct_idx(meta) {
                 let strukt = IL2CppStruct::from_bytes(
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, statik, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }
             return None;
         }
+        let xor = if statik {0x10} else {0x0};
         let mut off_vec: SmallVec<[(u32,u32);31]> = SmallVec::with_capacity(self.field_count as usize);
         let off_off_off = meta.meta_reg.field_offsets + idx as usize * 8;
         if let Some(off_off) = meta.pe.map_v2p(u64::from_le_bytes(meta.assembly[off_off_off .. off_off_off + 8].try_into().unwrap())) {
@@ -717,7 +718,7 @@ impl IL2CppStruct {
                 if self.bitfield & 0x1 != 0 && typ.attrs & 0x10 == 0 {
                     off -= 16;
                 }
-                if typ.attrs & 0x50 == 0 {
+                if (typ.attrs ^ xor) & 0x50 == 0 {
                     off_vec.push((off, field_idx as u32 + self.field_start as u32));
                 }
             }
@@ -728,7 +729,7 @@ impl IL2CppStruct {
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, statik, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }
@@ -742,7 +743,7 @@ impl IL2CppStruct {
                     &meta.type_definitions.as_slice_of(&meta.metadata)
                     [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
                 );
-                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, meta) {
+                if let Some((field, offset, strukt_idx)) = strukt.get_field_type_at_off(struct_idx, off, statik, meta) {
                     return Some((field, offset, strukt_idx));
                 }
             }

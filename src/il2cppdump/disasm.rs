@@ -1,7 +1,7 @@
 use core::str;
 use std::{arch::x86_64::{__m128i, _mm_and_si128, _mm_loadl_epi64, _mm_set1_epi8, _mm_setr_epi8, _mm_shuffle_epi8, _mm_srli_epi64, _mm_storeu_si128, _mm_unpacklo_epi8}, cmp::{max, min}, collections::HashMap, hash::BuildHasherDefault};
 use fxhash::FxHashMap;
-use iced_x86::{CC_ae, CC_b, CC_be, CC_np, CC_p, Code, Decoder, DecoderOptions, FlowControl, Formatter, GasFormatter, Instruction, Mnemonic, OpKind, Register, SymbolResolver, SymbolResult};
+use iced_x86::{CC_ae, CC_b, CC_be, CC_np, CC_p, Code, Decoder, DecoderOptions, FlowControl, Formatter, GasFormatter, Instruction, MemorySize, Mnemonic, OpKind, Register, SymbolResolver, SymbolResult};
 //use smallvec::SmallVec;
 
 use crate::format_to;
@@ -69,8 +69,14 @@ impl Method {
                                 match instruction_b.flow_control() {
                                     FlowControl::UnconditionalBranch |
                                     FlowControl::ConditionalBranch => {
-                                        if (instruction_b.near_branch64() >= addr || instruction_b.near_branch64() <= instruction.next_ip()) && last {
-                                            end_idx -= 1;
+                                        let addr_b = instruction_b.near_branch64();
+                                        if addr_b >= self.addr && addr_b <= self.addr + self.len {
+                                            if (addr_b >= addr || addr_b <= instruction.next_ip()) && last {
+                                                end_idx -= 1;
+                                            }
+                                        } else if instruction_b.mnemonic() == Mnemonic::Jmp {
+                                            indent = false;
+                                            break;
                                         }
                                     }
                                     FlowControl::Return |
@@ -281,6 +287,9 @@ impl Method {
                         } else if !loops.contains_key(&addr) {
                             loops.insert(addr, loops.len());
                         }
+                    } else if instruction.mnemonic() == Mnemonic::Jmp && last_loc_ip <= instruction.ip(){
+                        last_ret_idx = Some(i);
+                        break;
                     }
                 }
                 FlowControl::Call => {
@@ -356,23 +365,39 @@ impl Method {
     }
 }
 
+#[derive(Clone, Copy)]
+enum RegContents {
+    None,
+    Strukt(u32),
+    StruktStatic(u32),
+    B8Strukt(u32),
+}
+impl From<Option<u32>> for RegContents {
+    fn from(value: Option<u32>) -> Self {
+        match value {
+            None => RegContents::None,
+            Some(x) => RegContents::Strukt(x),
+        }
+    }
+}
+
 struct RegData {
-    gprs:     [Option<u32>;16],
+    gprs:  [RegContents;16],
     stack: FxHashMap<i32, u32>,
-    sp:                     i32
+    sp:    i32,
 }
 impl RegData {
     fn from_method(method: &Method, meta: &IL2CppDumper) -> Self {
         let mut parameter_number = 0;
         
         let mut ret = Self {
-            gprs:  [None; 16],
+            gprs:  [RegContents::None; 16],
             stack: HashMap::with_capacity_and_hasher(32, BuildHasherDefault::default()),
             sp:    0,
         };
         
         if !method.is_static() {
-            ret.push_arg(method.typ, &mut parameter_number);
+            ret.push_arg(method.typ.into(), &mut parameter_number);
         }
         
         if method.metadata.parameter_start >= 0 {
@@ -380,9 +405,9 @@ impl RegData {
                 let arg = IL2CppParameter::from_bytes(&meta.parameters.as_slice_of(&meta.metadata)[i*PARAMETER_STRIDE..i*PARAMETER_STRIDE+PARAMETER_STRIDE]);
                 if arg.type_idx >= 0 {
                     let typ = &meta.types_array[arg.type_idx as usize];
-                    ret.push_arg(typ.get_struct(), &mut parameter_number);
+                    ret.push_arg(typ.get_struct().into(), &mut parameter_number);
                 } else {
-                    ret.push_arg(None, &mut parameter_number);
+                    ret.push_arg(RegContents::None, &mut parameter_number);
                 }
             }
         }
@@ -390,14 +415,14 @@ impl RegData {
         ret
     }
     
-    fn push_arg(&mut self, typ: Option<u32>, number: &mut i32) {
+    fn push_arg(&mut self, typ: RegContents, number: &mut i32) {
         match *number {
             0 => {self.gprs[1] = typ}
             1 => {self.gprs[2] = typ}
             2 => {self.gprs[8] = typ}
             3 => {self.gprs[9] = typ}
             _ => {
-                if let Some(typ) = typ {
+                if let RegContents::Strukt(typ) = typ {
                     self.stack.insert((*number + 1) * -8, typ);
                 }
             }
@@ -418,8 +443,8 @@ impl RegData {
                         if let Register::RSP = instruction.memory_base() {
                             let offset = instruction.memory_displacement32() as i32 + self.sp;
                             match src {
-                                Some(x) => {self.stack.insert(offset, x);},
-                                None    => {self.stack.remove(&offset);}
+                                RegContents::Strukt(x) => {self.stack.insert(offset, x);},
+                                _ => {self.stack.remove(&offset);}
                             }
                         }
                     }
@@ -447,19 +472,19 @@ impl RegData {
                     let method = &meta.methods_array[*idx as usize];
                     if method.metadata.return_type >= 0 {
                         let typ = &meta.types_array[method.metadata.return_type as usize];
-                        self.gprs[0] = typ.get_struct();
+                        self.gprs[0] = typ.get_struct().into();
                     } else {
-                        self.gprs[0] = None
+                        self.gprs[0] = RegContents::None
                     }
                 } else {
-                    self.gprs[0] = None
+                    self.gprs[0] = RegContents::None
                 }
-                self.gprs[1]  = None;
-                self.gprs[2]  = None;
-                self.gprs[8]  = None;
-                self.gprs[9]  = None;
-                self.gprs[10] = None;
-                self.gprs[11] = None;
+                self.gprs[1]  = RegContents::None;
+                self.gprs[2]  = RegContents::None;
+                self.gprs[8]  = RegContents::None;
+                self.gprs[9]  = RegContents::None;
+                self.gprs[10] = RegContents::None;
+                self.gprs[11] = RegContents::None;
             }
             Code::Movzx_r64_rm8  |
             Code::Movzx_r32_rm8  |
@@ -473,7 +498,7 @@ impl RegData {
             Code::Mov_r16_imm16  |
             Code::Mov_r32_imm32  |
             Code::Mov_r64_imm64 => {
-                self.gprs[instruction.op0_register().full_register().number()] = None;
+                self.gprs[instruction.op0_register().full_register().number()] = RegContents::None;
             }
             _ => {}
         }
@@ -485,7 +510,7 @@ impl RegData {
         }
     }
 
-    fn get_src_operand(&mut self, instruction: &Instruction, meta: &IL2CppDumper) -> Option<u32> {
+    fn get_src_operand(&mut self, instruction: &Instruction, meta: &IL2CppDumper) -> RegContents {
         match instruction.op1_kind() {
             OpKind::Register => {
                 self.gprs[instruction.op1_register().number()]
@@ -493,35 +518,85 @@ impl RegData {
             OpKind::Memory => {
                 match instruction.memory_base() {
                     Register::RSP => {
-                        self.stack.get(&(instruction.memory_displacement32() as i32 + self.sp)).cloned()
+                        self.stack.get(&(instruction.memory_displacement32() as i32 + self.sp)).cloned().into()
                     }
-                    Register::None |
-                    Register::RIP => None,
-                    _ => {
-                        let struct_idx = self.gprs[instruction.memory_base().number()]?;
-                        let strukt = IL2CppStruct::from_bytes(
-                            &meta.type_definitions.as_slice_of(&meta.metadata)
-                            [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
-                        );
-                        let (field, field_off, _) = strukt.get_field_type_at_off(struct_idx, instruction.memory_displacement64(), meta)?;
-                        if field_off == instruction.memory_displacement32() {
-                            let strukt_idx = meta.types_array[field.type_idx as usize].get_struct()?;
-                            let strukt = IL2CppStruct::from_bytes(
-                                &meta.type_definitions.as_slice_of(&meta.metadata)
-                                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
-                            );
-                            if strukt.flags & 0x2000 == 0 {
-                                Some(strukt_idx)
+                    Register::None => RegContents::None,
+                    Register::RIP => match instruction.memory_size() {
+                        MemorySize::UInt64 |
+                        MemorySize::Int64 => {
+                            if let Some(off) = meta.pe.map_v2p(instruction.ip_rel_memory_address()) {
+                                let qword = u64::from_le_bytes(meta.assembly[off .. off + 8].try_into().unwrap());
+                                if qword >> 32 != 0 || qword & 1 == 0 {
+                                    return RegContents::None;
+                                }
+                                if qword >> 29 != 1 {
+                                    return RegContents::None;
+                                }
+                                let type_idx = ((qword >> 1) & 0xFFF_FFFF) as usize;
+                                
+                                if let Some(typ) = meta.types_array.get(type_idx) {
+                                    match typ.get_struct() {
+                                        None => RegContents::None,
+                                        Some(x) => RegContents::B8Strukt(x),
+                                    }
+                                } else {
+                                    RegContents::None
+                                }
                             } else {
-                                None
+                                RegContents::None
                             }
-                        } else {
-                            None
+                        }
+                        _ => RegContents::None
+                    },
+                    _ => {
+                        let contents = self.gprs[instruction.memory_base().number()];
+                        match contents {
+                            RegContents::StruktStatic(struct_idx) |
+                            RegContents::Strukt(struct_idx) => {
+                                let strukt = IL2CppStruct::from_bytes(
+                                    &meta.type_definitions.as_slice_of(&meta.metadata)
+                                    [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                                );
+                                if let Some((field, field_off, _)) = strukt.get_field_type_at_off(
+                                    struct_idx,
+                                    instruction.memory_displacement64(),
+                                    matches!(contents, RegContents::StruktStatic(_)),
+                                    meta
+                                ) {
+                                    if field_off == instruction.memory_displacement32() {
+                                        if let Some(strukt_idx) = meta.types_array[field.type_idx as usize].get_struct() {
+                                            let strukt = IL2CppStruct::from_bytes(
+                                                &meta.type_definitions.as_slice_of(&meta.metadata)
+                                                [struct_idx as usize * STRUCT_STRIDE .. struct_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                                            );
+                                            if strukt.flags & 0x2000 == 0 {
+                                                RegContents::Strukt(strukt_idx)
+                                            } else {
+                                                RegContents::None
+                                            }
+                                        } else {
+                                            RegContents::None
+                                        }
+                                    } else {
+                                        RegContents::None
+                                    }
+                                } else {
+                                    RegContents::None
+                                }
+                            },
+                            RegContents::B8Strukt(idx) => {
+                                if instruction.memory_displacement32() == 0xB8 {
+                                    RegContents::StruktStatic(idx)
+                                } else {
+                                    RegContents::None
+                                }
+                            }
+                            RegContents::None => RegContents::None,
                         }
                     }
                 }
             }
-            _ => None
+            _ => RegContents::None
         }
     }
 }
@@ -602,15 +677,24 @@ impl SymbolResolver for DecodeSymbolResolver {
                 match instruction.memory_base() {
                     Register::None => {}
                     Register::RIP  => {}
-                    _ => if let Some(class_idx) = reg_data.gprs[instruction.memory_base().number()] {
-                        let strukt = IL2CppStruct::from_bytes(
-                            &meta.type_definitions.as_slice_of(&meta.metadata)
-                            [class_idx as usize * STRUCT_STRIDE .. class_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
-                        );
-                        let string = format!("{}.{}", meta.get_string(strukt.name_off), strukt.get_field_name_at_off(class_idx, addr, meta));
-                        if !string.is_empty() {
-                            return Some(SymbolResult::with_string(addr, string))
+                    _ => match reg_data.gprs[instruction.memory_base().number()] {
+                        RegContents::StruktStatic(class_idx) |
+                        RegContents::Strukt(class_idx) => {
+                            let strukt = IL2CppStruct::from_bytes(
+                                &meta.type_definitions.as_slice_of(&meta.metadata)
+                                [class_idx as usize * STRUCT_STRIDE .. class_idx as usize * STRUCT_STRIDE + STRUCT_STRIDE]
+                            );
+                            let string = format!("{}.{}", meta.get_string(strukt.name_off), strukt.get_field_name_at_off(
+                                class_idx,
+                                addr,
+                                matches!(reg_data.gprs[instruction.memory_base().number()], RegContents::StruktStatic(_)),
+                                meta,
+                            ));
+                            if !string.is_empty() {
+                                return Some(SymbolResult::with_string(addr, string))
+                            }
                         }
+                        _ => {}
                     }
                 }
             }
