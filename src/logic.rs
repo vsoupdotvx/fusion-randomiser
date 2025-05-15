@@ -1445,7 +1445,7 @@ impl RandomisationData {
                             Unlockable::EndoFlame,
                             Unlockable::WallNut,
                         ].into_iter().collect(),
-                        uses: None, //total guess
+                        uses: None,
                         ..Default::default()
                     },
                     !SolutionEntry {
