@@ -1384,6 +1384,30 @@ impl RandomisationData {
                         ..Default::default()
                     },
                 ].into_boxed_slice()),
+                (ZombieFlags::IS_WATER, vec![
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Tanglekelp,
+                            Unlockable::ThreePeater,
+                        ].into_iter().collect(),
+                        weight: 2.,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [Unlockable::Tanglekelp].into_iter().collect(),
+                        weight: 2.,
+                        ..Default::default()
+                    },
+                    SolutionEntry {
+                        plants: [
+                            Unlockable::Tanglekelp,
+                            Unlockable::Squash,
+                        ].into_iter().collect(),
+                        weight: 2.,
+                        uses: Some(3),
+                        ..Default::default()
+                    },
+                ].into_boxed_slice()),
             ].into_iter().collect();
             
             for val in solution_table.values_mut() {

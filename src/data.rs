@@ -8,6 +8,7 @@ use crate::il2cppdump::IL2CppDumper;
 pub static ZOMBIE_DATA: OnceLock<Vec<ZombieData>> = OnceLock::new();
 pub static LEVEL_DATA:  OnceLock<Vec<LevelData>>  = OnceLock::new();
 
+#[derive(PartialEq, Eq)]
 pub enum ZombieLanes {
     Land,
     Water,
@@ -39,6 +40,7 @@ bitflags! {
         const V_HIGH_HEALTH = 0x100;
         const GARG_TYPE     = 0x200;
         const EVIL_DEATH    = 0x400;
+        const IS_WATER      = 0x800;
     }
 }
 
@@ -1641,6 +1643,9 @@ pub fn init_defaults_from_dump(dump: &IL2CppDumper) {
                 Some(*x as i32)
             },
             None => panic!("Failed to find enum ID of {:?}", zombie.zombie_type),
+        };
+        if zombie.allowed_lanes == ZombieLanes::Water {
+            zombie.flags |= ZombieFlags::IS_WATER;
         }
     }
     
