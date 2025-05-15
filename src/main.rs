@@ -165,16 +165,21 @@ impl App {
                 },
                 AppEvent::Die => return,
                 AppEvent::Dump(path) => {
-                    let dump_arc = Arc::new(dumper);
-                    
-                    match dump_arc.output_disasm(path.clone().join("out.s")) {
-                        Ok(())  => println!("Successfully output disasm"),
-                        Err(()) => println!("Failed to output disasm"),
+                    match dumper.output_functions(path.clone().join("functions.txt")) {
+                        Ok(())  => println!("Successfully output functions"),
+                        Err(err) => println!("Failed to output functions: {err}"),
                     }
                     
-                    match dump_arc.output_structs(path.clone().join("out_structs.rs")) {
+                    let dump_arc = Arc::new(dumper);
+                    
+                    match dump_arc.output_disasm(path.clone().join("disasm.s")) {
+                        Ok(())  => println!("Successfully output disasm"),
+                        Err(err) => println!("Failed to output disasm: {err}"),
+                    }
+                    
+                    match dump_arc.output_structs(path.clone().join("structs.rs")) {
                         Ok(())  => println!("Successfully output structs"),
-                        Err(()) => println!("Failed to output structs"),
+                        Err(err) => println!("Failed to output structs: {err}"),
                     }
                     
                     dumper = Arc::into_inner(dump_arc).unwrap();
@@ -220,16 +225,21 @@ impl App {
                         },
                         AppEvent::Die => return,
                         AppEvent::Dump(path) => {
-                            let dump_arc = Arc::new(dumper);
-                            
-                            match dump_arc.output_disasm(path.clone().join("out.s")) {
-                                Ok(())  => println!("Successfully output disasm"),
-                                Err(()) => println!("Failed to output disasm"),
+                            match dumper.output_functions(path.clone().join("functions.txt")) {
+                                Ok(())  => println!("Successfully output functions"),
+                                Err(err) => println!("Failed to output functions: {err}"),
                             }
                             
-                            match dump_arc.output_structs(path.clone().join("out_structs.rs")) {
+                            let dump_arc = Arc::new(dumper);
+                            
+                            match dump_arc.output_disasm(path.clone().join("disasm.s")) {
+                                Ok(())  => println!("Successfully output disasm"),
+                                Err(err) => println!("Failed to output disasm: {err}"),
+                            }
+                            
+                            match dump_arc.output_structs(path.clone().join("structs.rs")) {
                                 Ok(())  => println!("Successfully output structs"),
-                                Err(()) => println!("Failed to output structs"),
+                                Err(err) => println!("Failed to output structs: {err}"),
                             }
                             
                             dumper = Arc::into_inner(dump_arc).unwrap();

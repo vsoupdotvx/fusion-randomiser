@@ -6,6 +6,7 @@ use core::ffi::CStr;
 use core::mem::size_of;
 use core::mem::transmute;
 use std::cmp::max;
+use std::error::Error;
 use std::fs::OpenOptions;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
@@ -1344,26 +1345,13 @@ impl IL2CppDumper {
                 self.methods_array[sorted[method_cnt-1].1].len = text_end - self.methods_array[sorted[method_cnt-1].1].addr;
             }
         }
-        let out_txt_path = concat!(env!("CARGO_MANIFEST_DIR"), "/out.txt");
-        if let Ok(out_txt) = OpenOptions::new().create_new(true).write(true).open(out_txt_path) {
-            let mut out_txt = out_txt;
-            for (i, method) in self.methods_array.iter().enumerate() {
-                let name = method.name(self);
-                //println!("0x{:07x} 0x{:09x} 0x{:05x} {}", self.pe.map_v2p(method.1.addr).unwrap_or(0), method.1.addr, method.1.len, name);
-                out_txt.write_all(format!("0x{:07x} 0x{:09x} 0x{:05x} {}\n", self.pe.map_v2p(method.addr).unwrap_or(0), method.addr, method.len, name).as_bytes()).unwrap();
-                if method.addr != 0 {
-                    self.method_addr_table.insert(method.addr, i as u32);
-                }
-                self.methods_table.insert(name, i as u32);
+        
+        for (i, method) in self.methods_array.iter().enumerate() {
+            let name = method.name(self);
+            if method.addr != 0 {
+                self.method_addr_table.insert(method.addr, i as u32);
             }
-        } else {
-            for (i, method) in self.methods_array.iter().enumerate() {
-                let name = method.name(self);
-                if method.addr != 0 {
-                    self.method_addr_table.insert(method.addr, i as u32);
-                }
-                self.methods_table.insert(name, i as u32);
-            }
+            self.methods_table.insert(name, i as u32);
         }
     }
     
@@ -1389,9 +1377,6 @@ impl IL2CppDumper {
     }
     
     fn get_arg_name(&self, idx: i32) -> (String, Option<u32>) {
-        //let typ = IL2CppStruct::from_bytes(&self.type_definitions.as_slice_of(&self.metadata)[(idx as usize * TYPE_STRIDE)..(idx as usize * TYPE_STRIDE)+TYPE_STRIDE]);
-        //typ.get_name(&self)
-        //format!("{:x}", idx)
         self.types_array[idx as usize].name(self)
     }
     
@@ -1411,8 +1396,7 @@ impl IL2CppDumper {
         }
     }
     
-    #[allow(clippy::result_unit_err)]
-    pub fn output_disasm<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
+    pub fn output_disasm<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(), Box<dyn Error>> {
         let mut sorted: Vec<u32> = Vec::with_capacity(self.methods_array.len());
         for i in 0..self.methods_array.len() {
             sorted.push(i as u32);
@@ -1420,152 +1404,169 @@ impl IL2CppDumper {
         sorted.sort_unstable_by_key(|x| self.methods_array[*x as usize].addr);
         let sorted = Arc::new(sorted);
         
-        if let Ok(out_s) = OpenOptions::new().create_new(true).truncate(true).write(true).open(out_path) {
-            let mut out_s = out_s;
-            
-            let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(self.methods_array.len());
-            for _ in 0..self.methods_array.len() {
-                string_vec.push(Mutex::new(None));
-            }
-            let string_vec = Arc::new(string_vec);
-            
-            let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; self.methods_array.len()]));
-            
-            //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
-            let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
-            let mut thread_vec = Vec::with_capacity(thread_cnt);
-            for _tidx in 0..thread_cnt {
-                thread_vec.push(thread::spawn({
-                    let string_vec_ref = Arc::clone(&string_vec);
-                    let a_bool_vec_ref = Arc::clone(&a_bool_vec);
-                    let sorted_ref     = Arc::clone(&sorted);
-                    let il2cpp_ref     = Arc::clone(self);
-                    move || {
-                        let mut current_idx = 0;
-                        let mut out_str = String::new();
-                        loop {
-                            {
-                                let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
-                                let tmp = current_idx;
-                                for i in tmp..sorted_ref.len() {
-                                    let taken = bool_mutex.get_mut(i).unwrap();
-                                    if *taken {
-                                        current_idx = i + 1;
-                                    } else {
-                                        *taken = true;
-                                        break;
-                                    }
+        let mut out_s = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(out_path)?;
+        
+        let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(self.methods_array.len());
+        for _ in 0..self.methods_array.len() {
+            string_vec.push(Mutex::new(None));
+        }
+        let string_vec = Arc::new(string_vec);
+        
+        let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; self.methods_array.len()]));
+        
+        //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
+        let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
+        let mut thread_vec = Vec::with_capacity(thread_cnt);
+        for _tidx in 0..thread_cnt {
+            thread_vec.push(thread::spawn({
+                let string_vec_ref = Arc::clone(&string_vec);
+                let a_bool_vec_ref = Arc::clone(&a_bool_vec);
+                let sorted_ref     = Arc::clone(&sorted);
+                let il2cpp_ref     = Arc::clone(self);
+                move || {
+                    let mut current_idx = 0;
+                    let mut out_str = String::new();
+                    loop {
+                        {
+                            let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
+                            let tmp = current_idx;
+                            for i in tmp..sorted_ref.len() {
+                                let taken = bool_mutex.get_mut(i).unwrap();
+                                if *taken {
+                                    current_idx = i + 1;
+                                } else {
+                                    *taken = true;
+                                    break;
                                 }
                             }
-                            
-                            if current_idx == sorted_ref.len() {
-                                break;
-                            }
-                            
-                            il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
-                            
-                            {
-                                let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
-                                *string_mutex = Some(out_str.clone());
-                            }
-                            
-                            out_str.clear();
                         }
+                        
+                        if current_idx == sorted_ref.len() {
+                            break;
+                        }
+                        
+                        il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
+                        
+                        {
+                            let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
+                            *string_mutex = Some(out_str.clone());
+                        }
+                        
+                        out_str.clear();
                     }
-                }));
-            }
-            for t in thread_vec {
-                t.join().unwrap();
-            }
-            
-            for s in string_vec.iter() {
-                out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
-            }
-        } else {
-            return Err(());
+                }
+            }));
+        }
+        for t in thread_vec {
+            t.join().unwrap();
+        }
+        
+        for s in string_vec.iter() {
+            out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
         }
         
         Ok(())
     }
     
-    #[allow(clippy::result_unit_err)]
-    pub fn output_structs<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(),()> {
+    pub fn output_functions<T: AsRef<Path>>(&mut self, out_path: T) -> Result<(), Box<dyn Error>> {
+        let mut out_txt = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(out_path)?;
+        
+        for method in &self.methods_array {
+            out_txt.write_all(format!(
+                "0x{:07x} 0x{:09x} 0x{:05x} {}\n",
+                self.pe.map_v2p(method.addr).unwrap_or(0),
+                method.addr,
+                method.len,
+                method.name(self)
+            ).as_bytes())?;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn output_structs<T: AsRef<Path>>(self : &Arc<Self>, out_path: T) -> Result<(), Box<dyn Error>> {
         let structs_len = self.type_definitions.siz as usize / STRUCT_STRIDE;
         
         let mut sorted: Vec<u32> = Vec::with_capacity(structs_len);
         for i in 0..structs_len {
             sorted.push(i as u32);
         }
-        //sorted.sort_unstable_by_key(|x| self.methods_array[*x as usize].addr);
         let sorted = Arc::new(sorted);
         
-        if let Ok(out_s) = OpenOptions::new().create_new(true).truncate(true).write(true).open(out_path) {
-            let mut out_s = out_s;
-            
-            let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(structs_len);
-            for _ in 0..structs_len {
-                string_vec.push(Mutex::new(None));
-            }
-            let string_vec = Arc::new(string_vec);
-            
-            let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; structs_len]));
-            
-            //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
-            let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
-            let mut thread_vec = Vec::with_capacity(thread_cnt);
-            for _tidx in 0..thread_cnt {
-                thread_vec.push(thread::spawn({
-                    let string_vec_ref = Arc::clone(&string_vec);
-                    let a_bool_vec_ref = Arc::clone(&a_bool_vec);
-                    let sorted_ref     = Arc::clone(&sorted);
-                    let il2cpp_ref     = Arc::clone(self);
-                    move || {
-                        let mut current_idx = 0;
-                        let mut out_str = String::new();
-                        loop {
-                            {
-                                let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
-                                let tmp = current_idx;
-                                for i in tmp..sorted_ref.len() {
-                                    let taken = bool_mutex.get_mut(i).unwrap();
-                                    if *taken {
-                                        current_idx = i + 1;
-                                    } else {
-                                        *taken = true;
-                                        break;
-                                    }
+        let mut out_s = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(out_path)?;
+        
+        let mut string_vec: Vec<Mutex<Option<String>>> = Vec::with_capacity(structs_len);
+        for _ in 0..structs_len {
+            string_vec.push(Mutex::new(None));
+        }
+        let string_vec = Arc::new(string_vec);
+        
+        let a_bool_vec: Arc<Mutex<Vec<bool>>> = Arc::new(Mutex::new(vec![false; structs_len]));
+        
+        //currently, 1 thread is half a second faster for unknown reasons I will have to investigate at some point
+        let thread_cnt = max(available_parallelism().map(|x| x.get()).unwrap_or(1) - 1, 1);
+        let mut thread_vec = Vec::with_capacity(thread_cnt);
+        for _tidx in 0..thread_cnt {
+            thread_vec.push(thread::spawn({
+                let string_vec_ref = Arc::clone(&string_vec);
+                let a_bool_vec_ref = Arc::clone(&a_bool_vec);
+                let sorted_ref     = Arc::clone(&sorted);
+                let il2cpp_ref     = Arc::clone(self);
+                move || {
+                    let mut current_idx = 0;
+                    let mut out_str = String::new();
+                    loop {
+                        {
+                            let mut bool_mutex = a_bool_vec_ref.lock().unwrap();
+                            let tmp = current_idx;
+                            for i in tmp..sorted_ref.len() {
+                                let taken = bool_mutex.get_mut(i).unwrap();
+                                if *taken {
+                                    current_idx = i + 1;
+                                } else {
+                                    *taken = true;
+                                    break;
                                 }
                             }
-                            
-                            if current_idx == sorted_ref.len() {
-                                break;
-                            }
-                            
-                            let strukt = IL2CppStruct::from_bytes(
-                                &il2cpp_ref.type_definitions.as_slice_of(&il2cpp_ref.metadata)[current_idx * STRUCT_STRIDE ..current_idx * STRUCT_STRIDE + STRUCT_STRIDE]
-                            );
-                            strukt.decode(&il2cpp_ref, &mut out_str, current_idx as u32);
-                            //il2cpp_ref.methods_array[sorted_ref[current_idx] as usize].decode(&il2cpp_ref, &mut out_str);
-                            
-                            {
-                                let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
-                                *string_mutex = Some(out_str.clone());
-                            }
-                            
-                            out_str.clear();
                         }
+                        
+                        if current_idx == sorted_ref.len() {
+                            break;
+                        }
+                        
+                        let strukt = IL2CppStruct::from_bytes(
+                            &il2cpp_ref.type_definitions.as_slice_of(&il2cpp_ref.metadata)[current_idx * STRUCT_STRIDE ..current_idx * STRUCT_STRIDE + STRUCT_STRIDE]
+                        );
+                        strukt.decode(&il2cpp_ref, &mut out_str, current_idx as u32);
+                        
+                        {
+                            let mut string_mutex = string_vec_ref[current_idx].lock().unwrap();
+                            *string_mutex = Some(out_str.clone());
+                        }
+                        
+                        out_str.clear();
                     }
-                }));
-            }
-            for t in thread_vec {
-                t.join().unwrap();
-            }
-            
-            for s in string_vec.iter() {
-                out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
-            }
-        } else {
-            return Err(());
+                }
+            }));
+        }
+        for t in thread_vec {
+            t.join().unwrap();
+        }
+        
+        for s in string_vec.iter() {
+            out_s.write_all((*s.lock().unwrap()).as_ref().unwrap().as_bytes()).unwrap();
         }
         
         Ok(())
