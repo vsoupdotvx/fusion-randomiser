@@ -29,7 +29,7 @@ HASH_U32 = 0x1758F99D
 "ENDMixData::InitMixData()+0x77":
 
 "PrizeMgr::GoBack(&mut self)+0x17A":
-	call adventure_level_enter_2
+	call adventure_level_enter_3
 "ENDPrizeMgr::GoBack(&mut self)+0x17A":
 
 "GiveFertilize::AnimGive(&mut self)+0x112":
@@ -99,6 +99,8 @@ adventure_level_enter_1:
 	movzbl (%rcx,%rdx),     %edx
 	ret
 
+adventure_level_enter_3:
+	incl   level_idx(%rip)
 adventure_level_enter_2:
 	leaq   level_lut(%rip), %rdx
 	movl   level_idx(%rip), %eax
