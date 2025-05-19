@@ -59,6 +59,7 @@ struct FusionData {
 }
 
 struct LevelUiData {
+    level_idx: usize,
     level: usize,
     zombies: Vec<u32>,
     wave_data: Vec<f32>,
@@ -367,6 +368,7 @@ impl App {
                 zombies.sort_by_key(|idx| zombie_data[*idx as usize].default_points);
                 
                 ptx.send(AsmEvent::LevelInfo(LevelUiData {
+                    level_idx: level_idx as usize,
                     level: rand_data.level_order[level_idx as usize] as usize,
                     zombies,
                     wave_data,
@@ -567,7 +569,7 @@ More will likely be added in the future.");
                             }
                             stage += 1;
                         }
-                        ui.label(RichText::new(format!("{}-{}", world, stage)).size(56.));
+                        ui.label(RichText::new(format!("{world}-{stage} / {}", level_ui_data.level_idx + 1)).size(56.));
                         
                         let legend = Legend::default()
                             .position(egui_plot::Corner::LeftTop);
