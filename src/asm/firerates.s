@@ -27,9 +27,12 @@
 "ENDPlant::PlantShootUpdate(&mut self)+0x5C":
 
 plant_get_firerate:
-	movl Plant.thePlantType(%rbx), %ecx
-	cmpl $1227, %ecx #MAX_PLANT
-	ja   plant_get_firerate.locA
+	pushq %rax
+	pushq %rcx
+	pushq %rdx
+	movl  Plant.thePlantType(%rbx), %ecx
+	cmpl  $1227, %ecx #MAX_PLANT
+	ja    plant_get_firerate.locA
 		call     plant_type_flatten
 		
 		leaq     plant_firerate_table(%rip), %rdx
@@ -45,6 +48,9 @@ plant_get_firerate:
 		movss const1.0(%rip), %xmm6
 	plant_get_firerate.locB:
 	mulss Plant.thePlantAttackInterval(%rbx), %xmm6
+	popq  %rdx
+	popq  %rcx
+	popq  %rax
 	ret
 
 fetch_firerate:

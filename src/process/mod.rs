@@ -233,7 +233,7 @@ impl FusionProcess {
                     game_assembly_module_info = Some(module_info);
                 }
             }
-            unsafe { handle.free() };
+            //unsafe { handle.free() }; //this crashes apparently
         }
         
         let module_info = match game_assembly_module_info {
