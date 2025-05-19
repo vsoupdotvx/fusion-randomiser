@@ -39,8 +39,6 @@ use windows::{
     },
 };
 #[cfg(target_os = "windows")]
-use windows_core::Free;
-#[cfg(target_os = "windows")]
 use core::{ffi::c_void, ptr};
 use super::util::CommonError;
 #[cfg(target_os = "linux")]
@@ -213,7 +211,7 @@ impl FusionProcess {
         let game_assembly_dll_path = game_assembly_dll_path.to_string_lossy().to_string();
         let mut game_assembly_module_info = None;
         
-        for mut handle in module_handles {
+        for handle in module_handles {
             let name_len = unsafe { GetModuleFileNameExW(
                 Some(fusion_handle),
                 Some(handle),
